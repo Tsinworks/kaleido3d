@@ -1,3 +1,26 @@
+/**
+ * MIT License
+ *
+ * Copyright (c) 2019 Zhou Qin
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 #pragma once
 
 #include <ngfx.h>
@@ -17,10 +40,8 @@ namespace vulkan {
 	{
 	public:
 		explicit iptr(T * pObj) : ptr_(pObj) {}
-		iptr(iptr<T> const& Other)
-			: ptr_(Other.ptr_) {
-			if (ptr_)
-				ptr_->retain_internal();
+		iptr(iptr<T> const& Other) : ptr_(Other.ptr_) {
+			if (ptr_) ptr_->retain_internal();
 		}
 		iptr() : ptr_(nullptr) {}
 		~iptr() {
@@ -74,31 +95,38 @@ namespace vulkan {
     private:
     };
 
-    class GpuLayer
-    {
-    public:
-        GpuLayer() = default;
-
-        friend class                    LayerEnumerator;
-    private:
-        VkLayerProperties               props_;
-        ngfx::Vec<VkExtensionProperties>ext_props_;
-    };
-
     class LayerEnumerator
     {
+        using LayerMap = ngfx::HashMap<std::string, VkLayerProperties>;
+        using ExtensionMap = ngfx::HashMap<std::string, VkExtensionProperties>;
     public:
         LayerEnumerator() = default;
         ~LayerEnumerator() = default;
 
         void init();
+
     private:
-        ngfx::Vec<GpuLayer>         layers_;
+        LayerMap                    layer_props_;
+        ExtensionMap                ext_props_;
     };
 
     extern Allocator                gAllocator;
     extern VkAllocationCallbacks    gAllocationCallbacks;
     extern LayerEnumerator          gLayerEnumerator;
+
+
+    struct QueueInfo
+    {
+        int32_t queueFamilyIndex;
+        VkQueue queue;
+    };
+
+    struct QueuesInfo
+    {
+        QueueInfo graphics;
+        QueueInfo compute;
+        QueueInfo transfer;
+    };
 
 	class GpuFactory : public ngfx::Factory
 	{
@@ -110,16 +138,22 @@ namespace vulkan {
         ngfx::Device *              getDevice(ngfx::uint32 id) override;
 
     private:
+        ngfx::Vec<VkPhysicalDevice> enumPhysicalDevices();
+
         VkInstance                  instance_;
         bool                        debug_enable_;
         ngfx_LogCallback            log_call_;
+        ngfx::Vec<iptr<GpuDevice>>  devices_;
 	};
 
 	class GpuDevice : public ngfx::Device, public VolkDeviceTable
 	{
 	public:
-		GpuDevice(VkDevice device);
+		GpuDevice(VkPhysicalDevice device);
 		~GpuDevice() override;
+
+        void                        set_label(const char * label) override;
+        const char*                 label() const override;
         ngfx::DeviceType            getType() const override;
 		ngfx::CommandQueue *		newQueue() override;
 		ngfx::Shader *				newShader() override;
@@ -133,10 +167,23 @@ namespace vulkan {
 		ngfx::Fence *				newFence() override;
 		ngfx::Result				wait() override;
 
+        friend class                GpuCommandBuffer;
+
 	private:
-		VkDevice					handle_ = VK_NULL_HANDLE;
+        void                        preCreateDevice();
+        void                        createDevice();
+        void                        postCreateDevice();
+
+        ngfx::Vec<const char*>      device_extensions_;
+        VkPhysicalDevice            physical_device_ = VK_NULL_HANDLE;
+		VkDevice					device_ = VK_NULL_HANDLE;
 		VkPhysicalDeviceProperties	properties_ = {};
 		VkPhysicalDeviceFeatures	features_ = {};
+        QueuesInfo                  queues_info_ = {};
+        ngfx::DeviceType            device_type_ = ngfx::DeviceType::Integrate;
+        bool                        is_mobile_gpu_ = false;
+        bool                        support_raytracing_ = false;
+        VkPhysicalDeviceRayTracingPropertiesNV ray_tracing_props_ = { };
 	};
 
     class GpuQueue : public ngfx::CommandQueue

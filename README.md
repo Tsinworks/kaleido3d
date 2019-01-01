@@ -65,6 +65,7 @@ Credits
 **ThirdParty Libraries:**
 
 * ZLib (Core)
+* [Robin-Map][8]
 * [VOLK (Meta loader for Vulkan API )][15]
 * Vulkan Memory Allocator (NGFX)
 * Glslang (ShaderCompiler)
@@ -84,6 +85,7 @@ Credits
 [5]: https://github.com/google/protobuf
 [6]: https://www.threadingbuildingblocks.org/
 [7]: https://github.com/KhronosGroup/glslang
+[8]: https://github.com/Tessil/robin-map
 [9]: https://vulkan.lunarg.com/
 [10]: https://github.com/KhronosGroup/SPIRV-Cross
 [11]: https://www.freetype.org

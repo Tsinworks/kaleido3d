@@ -6,14 +6,25 @@
 namespace vulkan {
     LayerEnumerator gLayerEnumerator;
 
-	GpuDevice::GpuDevice(VkDevice device)
-        : handle_(device)
+	GpuDevice::GpuDevice(VkPhysicalDevice device)
+        : physical_device_(device)
 	{
-        volkLoadDeviceTable(this, device);
+        preCreateDevice();
+        createDevice();
+        volkLoadDeviceTable(this, device_);
+        // detect extensions
+        postCreateDevice();
 	}
 	GpuDevice::~GpuDevice()
 	{
 	}
+    void GpuDevice::set_label(const char * label)
+    {
+    }
+    const char * GpuDevice::label() const
+    {
+        return nullptr;
+    }
     ngfx::DeviceType GpuDevice::getType() const
     {
         return ngfx::DeviceType();
@@ -63,6 +74,83 @@ namespace vulkan {
 		return ngfx::Result();
 	}
 
+    void GpuDevice::preCreateDevice()
+    {
+        vkGetPhysicalDeviceFeatures(physical_device_, &features_);
+        vkGetPhysicalDeviceProperties(physical_device_, &properties_);
+
+        uint32_t num_dev_layers = 0;
+        vkEnumerateDeviceLayerProperties(physical_device_, &num_dev_layers, nullptr);
+        if (num_dev_layers > 0) {
+            ngfx::Vec<VkLayerProperties> layer_props;
+            layer_props.resize(num_dev_layers);
+            vkEnumerateDeviceLayerProperties(physical_device_, &num_dev_layers, &layer_props[0]);
+
+            // list device supported extensions
+            uint32_t num_prop = 0;
+            vkEnumerateDeviceExtensionProperties(physical_device_, nullptr, &num_prop, nullptr);
+            if (num_prop > 0) {
+                ngfx::Vec<VkExtensionProperties> ext_props;
+                ext_props.resize(num_prop);
+                vkEnumerateDeviceExtensionProperties(physical_device_, nullptr, &num_prop, &ext_props[0]);
+            }
+        }
+
+        auto getQueueFamilyIndex = [&](VkQueueFlags queueFlag) {
+            uint32_t queueFamilyPropertyCount;
+            vkGetPhysicalDeviceQueueFamilyProperties(physical_device_, &queueFamilyPropertyCount, nullptr);
+            std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamilyPropertyCount);
+            vkGetPhysicalDeviceQueueFamilyProperties(physical_device_, &queueFamilyPropertyCount, queueFamilyProperties.data());
+            if (queueFlag & VK_QUEUE_COMPUTE_BIT)
+            {
+                for (uint32_t i = 0; i < queueFamilyPropertyCount; ++i)
+                {
+                    if ((queueFamilyProperties[i].queueFlags & VK_QUEUE_COMPUTE_BIT) &&
+                        !(queueFamilyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT))
+                    {
+                        return i;
+                    }
+                }
+            }
+            if (queueFlag & VK_QUEUE_TRANSFER_BIT)
+            {
+                for (uint32_t i = 0; i < queueFamilyPropertyCount; ++i)
+                {
+                    if ((queueFamilyProperties[i].queueFlags & VK_QUEUE_TRANSFER_BIT) &&
+                        !(queueFamilyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) &&
+                        !(queueFamilyProperties[i].queueFlags & VK_QUEUE_COMPUTE_BIT))
+                    {
+                        return i;
+                    }
+                }
+            }
+            for (uint32_t i = 0; i < queueFamilyPropertyCount; ++i)
+            {
+                if (queueFamilyProperties[i].queueFlags & queueFlag)
+                {
+                    return i;
+                }
+            }
+            return 0u;
+        };
+
+        queues_info_.graphics.queueFamilyIndex = getQueueFamilyIndex(VK_QUEUE_GRAPHICS_BIT);
+        queues_info_.compute.queueFamilyIndex = getQueueFamilyIndex(VK_QUEUE_COMPUTE_BIT);
+        queues_info_.transfer.queueFamilyIndex = getQueueFamilyIndex(VK_QUEUE_TRANSFER_BIT);
+    }
+
+    void GpuDevice::createDevice()
+    {
+        VkDeviceCreateInfo create_info = {
+            VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, nullptr, 0
+        };
+        vkCreateDevice(physical_device_, &create_info, &gAllocationCallbacks, &device_);
+    }
+
+    void GpuDevice::postCreateDevice()
+    {
+    }
+
     GpuQueue::GpuQueue()
     {
     }
@@ -80,26 +168,12 @@ namespace vulkan {
         , log_call_(log_call)
     {
         volkLoadInstance(instance_);
-        uint32_t num_devs = 0;
-        vkEnumeratePhysicalDevices(instance_, &num_devs, nullptr);
-        if (num_devs > 0) {
-            ngfx::Vec<VkPhysicalDevice> devs;
-            devs.resize(num_devs);
-            vkEnumeratePhysicalDevices(instance_, &num_devs, &devs[0]);
-            for (auto& dev : devs) {
-                VkPhysicalDeviceFeatures features = {};
-                VkPhysicalDeviceProperties properties = {};
-                vkGetPhysicalDeviceFeatures(dev, &features);
-                vkGetPhysicalDeviceProperties(dev, &properties);
-                properties.deviceType;
-                properties.deviceName;
-                VkDeviceCreateInfo create_info = { 
-                    VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, nullptr, 0
-                };
-                VkDevice device = VK_NULL_HANDLE;
-                vkCreateDevice(dev, &create_info, &gAllocationCallbacks, &device);
-            }
+        for (auto& physical_device : enumPhysicalDevices()) {
+            iptr<GpuDevice> device(new GpuDevice(physical_device));
+
+            devices_.push(device);
         }
+        
     }
 
     GpuFactory::~GpuFactory()
@@ -112,33 +186,46 @@ namespace vulkan {
     }
     int GpuFactory::numDevices()
     {
-        return 0;
+        return devices_.num();
     }
     ngfx::Device * GpuFactory::getDevice(ngfx::uint32 id)
     {
-        return nullptr;
+        return devices_[id].get();
     }
-
-
-
+    ngfx::Vec<VkPhysicalDevice> GpuFactory::enumPhysicalDevices()
+    {
+        ngfx::Vec<VkPhysicalDevice> ret;
+        uint32_t num_devs = 0;
+        vkEnumeratePhysicalDevices(instance_, &num_devs, nullptr);
+        if (num_devs > 0) {
+            ret.resize(num_devs);
+            vkEnumeratePhysicalDevices(instance_, &num_devs, &ret[0]);
+        }
+        return ret;
+    }
     void LayerEnumerator::init()
     {
-        ngfx::Vec< VkLayerProperties >      layer_props;
+        // list layers
         uint32_t num_layers = 0;
         vkEnumerateInstanceLayerProperties(&num_layers, nullptr);
+        ngfx::Vec<VkLayerProperties> layer_props;
         if (num_layers > 0) {
-            layers_.resize(num_layers);
             layer_props.resize(num_layers);
             vkEnumerateInstanceLayerProperties(&num_layers, &layer_props[0]);
-            for (uint32_t id = 0; id < num_layers; id++) {
-                auto& layer_prop = layer_props[id];
-                memcpy(&layers_[id].props_, &layer_prop, sizeof(layer_prop));
-                uint32_t num_props = 0;
-                vkEnumerateInstanceExtensionProperties(layer_prop.layerName, &num_props, nullptr);
-                if (num_props > 0) {
-                    layers_[id].ext_props_.resize(num_props);
-                    vkEnumerateInstanceExtensionProperties(layer_prop.layerName, &num_props, &layers_[id].ext_props_[0]);
-                }
+            for (auto& layer_prop : layer_props) {
+                layer_props_.push({ layer_prop.layerName, layer_prop });
+            }
+        }
+
+        // list default instance extensions
+        uint32_t num_props = 0;
+        vkEnumerateInstanceExtensionProperties(nullptr, &num_props, nullptr);
+        ngfx::Vec<VkExtensionProperties> ext_props;
+        if (num_props > 0) {
+            ext_props.resize(num_props);
+            vkEnumerateInstanceExtensionProperties(nullptr, &num_props, &ext_props[0]);
+            for (auto& ext_prop : ext_props) {
+                ext_props_.push({ ext_prop.extensionName, ext_prop });
             }
         }
     }
@@ -147,26 +234,24 @@ namespace vulkan {
 ngfx::Factory* CreateFactory(bool debug_layer_enable, ngfx_LogCallback log_call)
 {
     volkInitialize();
-
+    // find all layers and extensions
     vulkan::gLayerEnumerator.init();
 
     VkInstance instance = VK_NULL_HANDLE;
-
     VkApplicationInfo appInfo = { VK_STRUCTURE_TYPE_APPLICATION_INFO, nullptr, 
         "ngfx_vulkan", 1,
         "ngfx", 1,
         volkGetInstanceVersion()
     };
-
     VkInstanceCreateInfo instanceInfo = { VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, nullptr,
         0, &appInfo
     };
 
-    //if (debug_layer_enable) // Debug extension ??
-    //{
-    //    instanceCreateInfo.enabledLayerCount = RequiredLayers.size();
-    //    instanceCreateInfo.ppEnabledLayerNames = RequiredLayers.data();
-    //}
+    if (debug_layer_enable)
+    {
+        //instanceInfo.enabledLayerCount = RequiredLayers.size();
+        //instanceInfo.ppEnabledLayerNames = RequiredLayers.data();
+    }
 
     //instanceCreateInfo.enabledExtensionCount = RequiredInstanceExtensions.size();
     //instanceCreateInfo.ppEnabledExtensionNames = RequiredInstanceExtensions.data();

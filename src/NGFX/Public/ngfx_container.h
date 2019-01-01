@@ -7,13 +7,15 @@
 #include <vector>
 #include <type_traits>
 #include <ngfx_allocator.h>
+#include <tsl/robin_map.h>
 
 namespace ngfx
 {
 	template <typename key_type, typename value_type>
 	class HashMap
 	{
-		typedef std::unordered_map<key_type, value_type> this_map;
+		using this_map = tsl::robin_map<key_type, value_type>;
+        using this_map_value = typename this_map::value_type;
 	public:
 		HashMap() {}
 		~HashMap() {}
@@ -22,6 +24,10 @@ namespace ngfx
 		{
 			return m_map.find(key) != m_map.end();
 		}
+        
+        void push(this_map_value const& value) {
+            m_map.insert(value);
+        }
 
 	private:
 		this_map m_map;
