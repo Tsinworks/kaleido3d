@@ -32,6 +32,10 @@ namespace ngfx {
         RayTracing
     };
 
+    enum ColorSpace {
+        SRGBNonLinear
+    };
+
     [[vk("VkFormat"), mtl("MTLPixelFormat")]]
     enum PixelFormat {
         Invalid                     [[mtl("MTLPixelFormatInvalid"),vk("VK_FORMAT_UNDEFINED")]],
@@ -105,6 +109,58 @@ namespace ngfx {
         Block4BPP_sRGB_PVRTC1       [[mtl("MTLPixelFormatPVRTC_RGB_4BPP_sRGB"), vk("VK_FORMAT_PVRTC1_4BPP_SRGB_BLOCK_IMG")]],
         Block2BPP_sRGB_PVRTC2       [[mtl("MTLPixelFormatPVRTC_RGBA_2BPP_sRGB"), vk("VK_FORMAT_PVRTC2_2BPP_SRGB_BLOCK_IMG")]],
         Block4BPP_sRGB_PVRTC2       [[mtl("MTLPixelFormatPVRTC_RGBA_4BPP_sRGB"), vk("VK_FORMAT_PVRTC2_4BPP_SRGB_BLOCK_IMG")]]
+    };
+    [[vk("VkFormat"), mtl("MTLVertexFormat")]]
+    enum VertexFormat {
+        Invalid[[mtl("MTLVertexFormatInvalid"), vk("VK_FORMAT_UNDEFINED")]],
+
+        UChar[[mtl("MTLVertexFormatUChar"), vk("VK_FORMAT_UNDEFINED")]],
+        UChar2[[mtl("MTLVertexFormatUChar2"), vk("VK_FORMAT_UNDEFINED")]],
+        UChar3[[mtl("MTLVertexFormatUChar3"), vk("VK_FORMAT_UNDEFINED")]],
+        UChar4[[mtl("MTLVertexFormatUChar4"), vk("VK_FORMAT_UNDEFINED")]],
+
+        Char[[mtl("MTLVertexFormatChar"), vk("VK_FORMAT_UNDEFINED")]],
+        Char2[[mtl("MTLVertexFormatChar2"), vk("VK_FORMAT_UNDEFINED")]],
+        Char3[[mtl("MTLVertexFormatChar3"), vk("VK_FORMAT_UNDEFINED")]],
+        Char4[[mtl("MTLVertexFormatChar4"), vk("VK_FORMAT_UNDEFINED")]],
+
+        UShort[[mtl("MTLVertexFormatUShort"), vk("VK_FORMAT_UNDEFINED")]],
+        UShort2[[mtl("MTLVertexFormatUShort2"), vk("VK_FORMAT_UNDEFINED")]],
+        UShort3[[mtl("MTLVertexFormatUShort3"), vk("VK_FORMAT_UNDEFINED")]],
+        UShort4[[mtl("MTLVertexFormatUShort4"), vk("VK_FORMAT_UNDEFINED")]],
+
+        Short[[mtl("MTLVertexFormatShort"), vk("VK_FORMAT_UNDEFINED")]],
+        Short2[[mtl("MTLVertexFormatShort2"), vk("VK_FORMAT_UNDEFINED")]],
+        Short3[[mtl("MTLVertexFormatShort3"), vk("VK_FORMAT_UNDEFINED")]],
+        Short4[[mtl("MTLVertexFormatShort4"), vk("VK_FORMAT_UNDEFINED")]],
+
+        Half[[mtl("MTLVertexFormatHalf"), vk("VK_FORMAT_UNDEFINED")]],
+        Half2[[mtl("MTLVertexFormatHalf2"), vk("VK_FORMAT_UNDEFINED")]],
+        Half3[[mtl("MTLVertexFormatHalf3"), vk("VK_FORMAT_UNDEFINED")]],
+        Half4[[mtl("MTLVertexFormatHalf4"), vk("VK_FORMAT_UNDEFINED")]],
+
+        Float[[mtl("MTLVertexFormatFloat"), vk("VK_FORMAT_UNDEFINED")]],
+        Float2[[mtl("MTLVertexFormatFloat2"), vk("VK_FORMAT_UNDEFINED")]],
+        Float3[[mtl("MTLVertexFormatFloat3"), vk("VK_FORMAT_UNDEFINED")]],
+        Float4[[mtl("MTLVertexFormatFloat4"), vk("VK_FORMAT_UNDEFINED")]],
+
+        UInt[[mtl("MTLVertexFormatUInt"), vk("VK_FORMAT_UNDEFINED")]],
+        UInt2[[mtl("MTLVertexFormatUInt2"), vk("VK_FORMAT_UNDEFINED")]],
+        UInt3[[mtl("MTLVertexFormatUInt3"), vk("VK_FORMAT_UNDEFINED")]],
+        UInt4[[mtl("MTLVertexFormatUInt4"), vk("VK_FORMAT_UNDEFINED")]],
+
+        Int[[mtl("MTLVertexFormatInt"), vk("VK_FORMAT_UNDEFINED")]],
+        Int2[[mtl("MTLVertexFormatInt2"), vk("VK_FORMAT_UNDEFINED")]],
+        Int3[[mtl("MTLVertexFormatInt3"), vk("VK_FORMAT_UNDEFINED")]],
+        Int4[[mtl("MTLVertexFormatInt4"), vk("VK_FORMAT_UNDEFINED")]],
+
+        Int1010102Norm[[mtl("MTLVertexFormatInt1010102Normalized"), vk("VK_FORMAT_UNDEFINED")]],
+        UInt1010102Norm[[mtl("MTLVertexFormatUInt1010102Normalized"), vk("VK_FORMAT_UNDEFINED")]]
+    };
+    [[mtl("MTLIndexType"), vk("VkIndexType")]]
+    enum IndexType {
+        UInt16[[mtl("MTLIndexTypeUInt16"), vk("VK_INDEX_TYPE_UINT16")]],
+        UInt32[[mtl("MTLIndexTypeUInt32"), vk("VK_INDEX_TYPE_UINT32")]]
     };
     [[vk("VkSampleCountFlagBits")]]
     enum MultisampleFlags {
@@ -234,17 +290,19 @@ namespace ngfx {
         PerVertex		[[vk("VK_VERTEX_INPUT_RATE_VERTEX"), mtl("MTLVertexStepFunctionPerVertex")]],
         PerInstance		[[vk("VK_VERTEX_INPUT_RATE_INSTANCE"), mtl("MTLVertexStepFunctionPerInstance")]]
     };
-    [[mtl("MTLIndexType"), vk("VkIndexType")]]
-    enum IndexType {
-        UInt16          [[mtl("MTLIndexTypeUInt16"), vk("VK_INDEX_TYPE_UINT16")]],
-        UInt32          [[mtl("MTLIndexTypeUInt32"), vk("VK_INDEX_TYPE_UINT32")]]
-    };
-
 	enum ShaderProfile
 	{
 		SM5,
-		SM6
+		SM6,
+        SM6Raytracing
 	};
+
+    [[bitmask("true"),bitoffset("0")]]
+    enum ShaderOptimizeFlag {
+        None,
+        StripDebugInfo,
+        OptimizeSize
+    };
 
     enum ShaderStage {
         Vertex,
@@ -259,7 +317,7 @@ namespace ngfx {
         MissHit,
         Intersect
     };
-    [[bitmask("true"),vk("VkGeometryFlagBitsNV"),d3d12("D3D12_RAYTRACING_GEOMETRY_FLAGS")]]
+    [[bitmask("true"),bitoffset("0"),vk("VkGeometryFlagBitsNV"),d3d12("D3D12_RAYTRACING_GEOMETRY_FLAGS")]]
     enum RaytracingGeometryFlags
     {
         None                        [[d3d12("D3D12_RAYTRACING_GEOMETRY_FLAG_NONE")]],
@@ -278,7 +336,12 @@ namespace ngfx {
         TopLevel        [[vk("VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_NV"),d3d12("D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL")]],
         BottomLevel     [[vk("VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV"),d3d12("D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL")]]
     };
-    [[bitmask("true"),vk("VkBuildAccelerationStructureFlagBitsNV"),d3d12("D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS")]]
+    [[vk("VkCopyAccelerationStructureModeNV"),d3d12("D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE")]]
+    enum AccelerationStructureCopyMode {
+        Clone           [[vk("VK_COPY_ACCELERATION_STRUCTURE_MODE_CLONE_NV"),d3d12("D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE_CLONE")]],
+        Compact         [[vk("VK_COPY_ACCELERATION_STRUCTURE_MODE_COMPACT_NV"),d3d12("D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE_COMPACT")]]
+    };
+    [[bitmask("true"),bitoffset("0"),vk("VkBuildAccelerationStructureFlagBitsNV"),d3d12("D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS")]]
     enum AccelerationStructureBuildFlag {
         None            [[d3d12("D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE"),
                           vk("")]],

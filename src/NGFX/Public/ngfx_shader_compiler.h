@@ -69,12 +69,6 @@ enum class CompileOutputType : uint8_t {
     GLSL
 };
 
-enum class ShaderOptimizeLevel : uint8_t {
-    None            = 0,
-    StripDebugInfo  = 1,
-    OptimizeSize    = 1 << 1,
-};
-
 struct DeviceLimits {
 };
 
@@ -109,7 +103,7 @@ struct CompileOptions
     const char *EntryPoint;
     ShaderProfile Profile;
     ShaderStage ShaderType;
-    ShaderOptimizeLevel OptLevel;
+    ShaderOptimizeFlag OptLevel;
 };
 
 struct IShaderCompiler : public Rc {

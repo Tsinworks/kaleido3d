@@ -1,5 +1,7 @@
 #include "vk_common.h"
 
+#include "vk_mem_alloc.h"
+
 namespace vulkan {
     Allocator               gAllocator;
     VkAllocationCallbacks   gAllocationCallbacks = {
@@ -73,4 +75,29 @@ namespace vulkan {
     {
     }
 
+    GpuAllocator::GpuAllocator(GpuDevice * device)
+    {
+    }
+
+    GpuAllocator::~GpuAllocator()
+    {
+    }
+
+    void GpuDevice::initAllocator()
+    {
+        VmaAllocatorCreateInfo info = {
+            physical_device_,
+            device_,
+            0,
+            0,
+            &gAllocationCallbacks
+        };
+        vmaCreateAllocator(&info, &memory_allocator_);
+    }
+
+    void GpuDevice::destroyAllocator()
+    {
+        vmaDestroyAllocator(memory_allocator_);
+        memory_allocator_ = nullptr;
+    }
 }

@@ -8,7 +8,6 @@ gen = xige.InterfaceGenerator()
 class EnumObj(object):
     def __init__(self, n):
         self._root = n
-        self._index = 0
         self._enums = []
 
     def append(self, enum):
@@ -17,10 +16,21 @@ class EnumObj(object):
     def __str__(self):
         src = 'enum class ' + self._root.get_name() + ' : uint8_t {\n'
         is_mask = self._root.get_attrib('bitmask')
+        offset = self._root.get_attrib('bitoffset')
+        index = 0
+        if offset:
+            if '0' == offset:
+                index = int(-1)
+            else:
+                index = int(offset)
         for n in self._enums:
             if is_mask:
-                src += '  ' + n.get_name() + ' = (1 << ' + str(self._index) + '),\n'
-                self._index = self._index + 1
+                if index == -1:
+                    src += '  ' + n.get_name() + ' = 0,\n'
+                else:
+                    enum_value = 1 << index
+                    src += '  ' + n.get_name() + ' = ' + str(enum_value) + ',\n'
+                index = index + 1
             else:
                 src += '  ' + n.get_name() + ',\n'
         src += '};\n'

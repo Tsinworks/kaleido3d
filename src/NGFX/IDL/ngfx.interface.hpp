@@ -5,7 +5,7 @@ namespace ngfx {
     [[refcount("true")]]
     interface LabeledObject
     {
-        void                set_label(const char* label);
+        void                setLabel(const char* label);
         const char*         label() const;
     };
     [[refcount("true")]]
@@ -52,7 +52,7 @@ namespace ngfx {
 
 	};
 	interface TextureView;
-	[[vulkan("VkImage"), metal("id<MTLTexture>")]]
+	[[vk("VkImage"), mtl("id<MTLTexture>")]]
     interface Texture : Resource {
 		PixelFormat			format() const;
 		TextureView*		newView(Result* result);
@@ -62,7 +62,7 @@ namespace ngfx {
 		TextureUsage		usage() const;
 	};
 	interface BufferView;
-	[[vulkan("VkBuffer"), metal("id<MTLBuffer>")]]
+	[[vk("VkBuffer"), mtl("id<MTLBuffer>")]]
     interface Buffer : Resource {
 		BufferView*			newView(Result* result);
     };
@@ -70,27 +70,27 @@ namespace ngfx {
 		const Buffer*		buffer() const;
 		BufferUsage			usage() const;
 	};
-	[[vulkan("VkSampler"), metal("id<MTLSampler>")]]
+	[[vk("VkSampler"), mtl("id<MTLSampler>")]]
     interface Sampler : LabeledObject {
 
     };
     interface Shader : LabeledObject {
 
     };
-	[[vulkan("VkFramebuffer"),refcount("true")]]
+	[[vk("VkFramebuffer"),refcount("true")]]
     interface Framebuffer : LabeledObject {
 
     };
-	[[vulkan("VkSwapchain"),refcount("true")]]
+	[[vk("VkSwapchain"),refcount("true")]]
     interface Swapchain {
 		Texture*			currentTexture();
     };
 	[[transient("frame"), refcount("true")]]
 	interface BindGroup {
-		void				set_sampler(uint32 id, ShaderStage stage, const Sampler* sampler);
-		void				set_texture(uint32 id, ShaderStage stage, const TextureView* texture);
-		void				set_buffer(uint32 id, ShaderStage stage, const BufferView* buffer);
-		void				set_raytracing_as(uint32 id, ShaderStage stage, const RaytracingAS* as);
+		void				setSampler(uint32 id, ShaderStage stage, const Sampler* sampler);
+		void				setTexture(uint32 id, ShaderStage stage, const TextureView* texture);
+		void				setBuffer(uint32 id, ShaderStage stage, const BufferView* buffer);
+		void				setRaytracingAS(uint32 id, ShaderStage stage, const RaytracingAS* as);
 	};
     interface Pipeline : LabeledObject {
 		BindGroup*			newBindGroup(Result* result);
@@ -99,7 +99,7 @@ namespace ngfx {
     interface RenderPipeline : Pipeline {
 
     };
-	[[vulkan("VkRenderpass"), refcount("true")]]
+	[[vk("VkRenderpass"), refcount("true")]]
 	interface Renderpass {
 		RenderPipeline*		newRenderPipeline(const RenderPipelineDesc* desc, Result* result);
 	};
@@ -112,16 +112,18 @@ namespace ngfx {
 	interface RenderEncoder;
 	interface ComputeEncoder;
 	interface RaytraceEncoder;
-	[[vulkan("VkCommandBuffer"), metal("id<MTLCommandBuffer>")]]
+    interface ParallelEncoder;
+    interface BlitEncoder;
+	[[vk("VkCommandBuffer"), mtl("id<MTLCommandBuffer>")]]
     interface CommandBuffer : LabeledObject {
         RenderEncoder *		newRenderEncoder(Result* result);
         ComputeEncoder*		newComputeEncoder(Result* result);
-		Result				newBlitEncoder();
-        Result				newParallelRenderEncoder();
+        BlitEncoder*		newBlitEncoder(Result* result);
+        ParallelEncoder*	newParallelRenderEncoder(Result* result);
         RaytraceEncoder*	newRaytraceEncoder(Result* result);
         Result				commit();
     };
-	[[refcount("true"), vulkan("VkQueue"), metal("id<MTLQueue>")]]
+	[[refcount("true"), vk("VkQueue"), mtl("id<MTLQueue>")]]
     interface CommandQueue {
 		CommandBuffer*		newCommandBuffer() [[transient("true")]];
     };
@@ -131,24 +133,73 @@ namespace ngfx {
         void				endEncode();
     };
     interface RenderEncoder : CommandEncoder {
-        void				draw();
+        void                setViewport();
+        void                setScissors();
+        void				drawPrimitives();
+        void                drawIndexedPrimitives();
         void				present(Swapchain* swapchain);
     };
     interface ComputeEncoder : CommandEncoder {
         void				dispatch(int x, int y, int z);
     };
+    interface ParallelEncoder : CommandEncoder {
+        RenderEncoder*      subRenderEncoder(Result* result);
+    };
+    struct BufferStride {
+        Buffer*     buffer;
+        uint32      stride;
+    };
+
+    struct RaytracingAABBs
+    {
+        uint32 count;
+        BufferStride aabbs;
+    };
+    
+    struct RaytracingTriangles
+    {
+        uint32          vertexCount;
+        BufferStride    vertices;
+        VertexFormat    vertexFormat;
+        uint32          indexCount;
+        Buffer*         indices;
+        IndexType       indexType;
+        Buffer*         transforms;
+    };
+    
+    struct RaytracingGeometryData
+    {
+        RaytracingAABBs aabbs;
+        RaytracingTriangles triangles;
+    };
+
+    struct RaytracingGeometryDesc
+    {
+        RaytracingGeometryType type;
+        RaytracingGeometryFlags flag;
+        RaytracingGeometryData data;
+    };
+
+    struct RaytracingASDesc {
+        AccelerationStructureType type;
+        AccelerationStructureBuildFlag flag;
+        uint32 instanceCount;
+        uint32 geometryCount;
+        const RaytracingGeometryDesc* pGeometries;
+    };
+
     interface RaytraceEncoder : CommandEncoder {
-		void				buildAS();
-        void				traceRay(int width, int height);
+		void				buildAS(RaytracingAS* src, RaytracingAS* dest, Buffer* scratch);
+        void                copyAS(RaytracingAS* src, RaytracingAS* dest, AccelerationStructureCopyMode mode);
+        void				traceRay(Buffer* rayGen, BufferStride miss, BufferStride hit, int width, int height);
     };
-	[[vulkan("VkFence"), metal("id<MTLFence>")]]
+	[[vk("VkFence"), mtl("id<MTLFence>")]]
     interface Fence : LabeledObject {
-        void				signal();
     };
-	[[vulkan("VkDevice"), metal("id<MTLDevice>")]]
+	[[vk("VkDevice"), mtl("id<MTLDevice>")]]
     interface Device : LabeledObject {
         DeviceType          getType() const;
-		CommandQueue*		newQueue();
+		CommandQueue*		newQueue(Result* result);
         Shader*				newShader();
         Renderpass*			newRenderpass(const RenderpassDesc* desc, Result* result) [[gen_rc("true")]];
 		ComputePipeline*	newComputePipeline(const ComputePipelineDesc* desc, Result* result)[[gen_rc("true")]];
@@ -157,13 +208,14 @@ namespace ngfx {
         Buffer*				newBuffer(const BufferDesc* desc, StorageMode mode, Result* result)[[gen_rc("true")]];
 		RaytracingAS*		newRaytracingAS(const RaytracingASDesc* rtDesc, Result* result)[[gen_rc("true")]];
 		Sampler*			newSampler(const SamplerDesc* desc, Result* result)[[gen_rc("true")]];
-        Fence*				newFence();
+        Fence*				newFence(Result* result);
+        Swapchain*          newSwapchain(const SwapchainDesc* desc, const Swapchain* old, void* surface, Result* result);
         Result				wait();
     };
     [[refcount("true")]]
     interface Factory {
-        Swapchain*			newSwapchain(void* handle, void* reserved);
         int                 numDevices();
         Device*             getDevice(uint32 id);
+        void*               newSurface(void* handle);
     };
 }

@@ -32,6 +32,9 @@ enum class PipelineType : uint8_t {
   Compute,
   RayTracing,
 };
+enum class ColorSpace : uint8_t {
+  SRGBNonLinear,
+};
 enum class PixelFormat : uint8_t {
   Invalid,
   R8Unorm,
@@ -94,6 +97,47 @@ enum class PixelFormat : uint8_t {
   Block4BPP_sRGB_PVRTC1,
   Block2BPP_sRGB_PVRTC2,
   Block4BPP_sRGB_PVRTC2,
+};
+enum class VertexFormat : uint8_t {
+  Invalid,
+  UChar,
+  UChar2,
+  UChar3,
+  UChar4,
+  Char,
+  Char2,
+  Char3,
+  Char4,
+  UShort,
+  UShort2,
+  UShort3,
+  UShort4,
+  Short,
+  Short2,
+  Short3,
+  Short4,
+  Half,
+  Half2,
+  Half3,
+  Half4,
+  Float,
+  Float2,
+  Float3,
+  Float4,
+  UInt,
+  UInt2,
+  UInt3,
+  UInt4,
+  Int,
+  Int2,
+  Int3,
+  Int4,
+  Int1010102Norm,
+  UInt1010102Norm,
+};
+enum class IndexType : uint8_t {
+  UInt16,
+  UInt32,
 };
 enum class MultisampleFlags : uint8_t {
   None,
@@ -204,13 +248,15 @@ enum class VertexInputRate : uint8_t {
   PerVertex,
   PerInstance,
 };
-enum class IndexType : uint8_t {
-  UInt16,
-  UInt32,
-};
 enum class ShaderProfile : uint8_t {
   SM5,
   SM6,
+  SM6Raytracing,
+};
+enum class ShaderOptimizeFlag : uint8_t {
+  None = 0,
+  StripDebugInfo = 1,
+  OptimizeSize = 2,
 };
 enum class ShaderStage : uint8_t {
   Vertex,
@@ -226,9 +272,9 @@ enum class ShaderStage : uint8_t {
   Intersect,
 };
 enum class RaytracingGeometryFlags : uint8_t {
-  None = (1 << 0),
-  Opaque = (1 << 1),
-  NoDuplicateAnyHitInvocation = (1 << 2),
+  None = 0,
+  Opaque = 1,
+  NoDuplicateAnyHitInvocation = 2,
 };
 enum class RaytracingGeometryType : uint8_t {
   Triangles,
@@ -238,13 +284,17 @@ enum class AccelerationStructureType : uint8_t {
   TopLevel,
   BottomLevel,
 };
+enum class AccelerationStructureCopyMode : uint8_t {
+  Clone,
+  Compact,
+};
 enum class AccelerationStructureBuildFlag : uint8_t {
-  None = (1 << 0),
-  AllowUpdate = (1 << 1),
-  AllowCompaction = (1 << 2),
-  PreferFastTrace = (1 << 3),
-  PreferFastBuild = (1 << 4),
-  LowMemory = (1 << 5),
+  None = 0,
+  AllowUpdate = 1,
+  AllowCompaction = 2,
+  PreferFastTrace = 4,
+  PreferFastBuild = 8,
+  LowMemory = 16,
 };
 struct DepthStencilOp {
   StencilOperation stencilFailOp;
@@ -300,16 +350,16 @@ struct VertexInputState {
   Vec<VertexLayout> layouts;
 };
 enum class BufferUsage : uint8_t {
-  VertexBuffer = (1 << 0),
-  IndexBuffer = (1 << 1),
-  UniformBuffer = (1 << 2),
-  UnorderedAccess = (1 << 3),
-  AccelerationStructure = (1 << 4),
+  VertexBuffer = 1,
+  IndexBuffer = 2,
+  UniformBuffer = 4,
+  UnorderedAccess = 8,
+  AccelerationStructure = 16,
 };
 enum class TextureUsage : uint8_t {
-  ShaderResource = (1 << 0),
-  RenderTarget = (1 << 1),
-  DepthStencil = (1 << 2),
+  ShaderResource = 1,
+  RenderTarget = 2,
+  DepthStencil = 4,
 };
 struct BufferDesc {
   BufferUsage usages;
@@ -326,28 +376,6 @@ struct TextureDesc {
   uint32 mipLevels;
   uint64 deviceMask;
 };
-struct RaytracingAABBs {
-  uint32 count;
-};
-struct RaytracingTriangles {
-  uint32 count;
-};
-struct RaytracingGeometryData {
-  RaytracingAABBs aabbs;
-  RaytracingTriangles triangles;
-};
-struct RaytracingGeometryDesc {
-  RaytracingGeometryType type;
-  RaytracingGeometryFlags flag;
-  RaytracingGeometryData data;
-};
-struct RaytracingASDesc {
-  AccelerationStructureType type;
-  AccelerationStructureBuildFlag flag;
-  uint32 instanceCount;
-  uint32 geometryCount;
-  const RaytracingGeometryDesc* pGeometries;
-};
 struct SamplerDesc {
   FilterMode minFilter;
   FilterMode magFilter;
@@ -361,9 +389,17 @@ struct SamplerDesc {
   float minLod;
   float maxLod;
 };
+struct SwapchainDesc {
+  PixelFormat format;
+  uint32 width;
+  uint32 height;
+  ColorSpace colorSpace;
+  bool hdrDisplay;
+  uint32 maxImages;
+};
 struct Device;
 struct LabeledObject : public Rc {
-  virtual void set_label(const char * label) = 0;
+  virtual void setLabel(const char * label) = 0;
   virtual const char * label() const = 0;
 };
 struct Blob : public Rc {
@@ -430,10 +466,10 @@ struct Swapchain : public Rc {
   virtual Texture * currentTexture() = 0;
 };
 struct BindGroup : public Rc {
-  virtual void set_sampler(uint32 id, ShaderStage stage, const Sampler * sampler) = 0;
-  virtual void set_texture(uint32 id, ShaderStage stage, const TextureView * texture) = 0;
-  virtual void set_buffer(uint32 id, ShaderStage stage, const BufferView * buffer) = 0;
-  virtual void set_raytracing_as(uint32 id, ShaderStage stage, const RaytracingAS * as) = 0;
+  virtual void setSampler(uint32 id, ShaderStage stage, const Sampler * sampler) = 0;
+  virtual void setTexture(uint32 id, ShaderStage stage, const TextureView * texture) = 0;
+  virtual void setBuffer(uint32 id, ShaderStage stage, const BufferView * buffer) = 0;
+  virtual void setRaytracingAS(uint32 id, ShaderStage stage, const RaytracingAS * as) = 0;
 };
 struct Pipeline : public LabeledObject {
   virtual BindGroup * newBindGroup(Result * result) = 0;
@@ -451,11 +487,13 @@ struct RaytracePipeline : public Pipeline {
 struct RenderEncoder;
 struct ComputeEncoder;
 struct RaytraceEncoder;
+struct ParallelEncoder;
+struct BlitEncoder;
 struct CommandBuffer : public LabeledObject {
   virtual RenderEncoder * newRenderEncoder(Result * result) = 0;
   virtual ComputeEncoder * newComputeEncoder(Result * result) = 0;
-  virtual Result newBlitEncoder() = 0;
-  virtual Result newParallelRenderEncoder() = 0;
+  virtual BlitEncoder * newBlitEncoder(Result * result) = 0;
+  virtual ParallelEncoder * newParallelRenderEncoder(Result * result) = 0;
   virtual RaytraceEncoder * newRaytraceEncoder(Result * result) = 0;
   virtual Result commit() = 0;
 };
@@ -468,22 +506,61 @@ struct CommandEncoder : public LabeledObject {
   virtual void endEncode() = 0;
 };
 struct RenderEncoder : public CommandEncoder {
-  virtual void draw() = 0;
+  virtual void setViewport() = 0;
+  virtual void setScissors() = 0;
+  virtual void drawPrimitives() = 0;
+  virtual void drawIndexedPrimitives() = 0;
   virtual void present(Swapchain * swapchain) = 0;
 };
 struct ComputeEncoder : public CommandEncoder {
   virtual void dispatch(int x, int y, int z) = 0;
 };
+struct ParallelEncoder : public CommandEncoder {
+  virtual RenderEncoder * subRenderEncoder(Result * result) = 0;
+};
+struct BufferStride {
+  Buffer* buffer;
+  uint32 stride;
+};
+struct RaytracingAABBs {
+  uint32 count;
+  BufferStride aabbs;
+};
+struct RaytracingTriangles {
+  uint32 vertexCount;
+  BufferStride vertices;
+  VertexFormat vertexFormat;
+  uint32 indexCount;
+  Buffer* indices;
+  IndexType indexType;
+  Buffer* transforms;
+};
+struct RaytracingGeometryData {
+  RaytracingAABBs aabbs;
+  RaytracingTriangles triangles;
+};
+struct RaytracingGeometryDesc {
+  RaytracingGeometryType type;
+  RaytracingGeometryFlags flag;
+  RaytracingGeometryData data;
+};
+struct RaytracingASDesc {
+  AccelerationStructureType type;
+  AccelerationStructureBuildFlag flag;
+  uint32 instanceCount;
+  uint32 geometryCount;
+  const RaytracingGeometryDesc* pGeometries;
+};
 struct RaytraceEncoder : public CommandEncoder {
-  virtual void buildAS() = 0;
-  virtual void traceRay(int width, int height) = 0;
+  virtual void buildAS(RaytracingAS * src, RaytracingAS * dest, Buffer * scratch) = 0;
+  virtual void copyAS(RaytracingAS * src, RaytracingAS * dest, AccelerationStructureCopyMode mode) = 0;
+  virtual void traceRay(Buffer * rayGen, BufferStride miss, BufferStride hit, int width, int height) = 0;
 };
 struct Fence : public LabeledObject {
-  virtual void signal() = 0;
 };
 struct Device : public LabeledObject {
   virtual DeviceType getType() const = 0;
-  virtual CommandQueue * newQueue() = 0;
+  virtual CommandQueue * newQueue(Result * result) = 0;
   virtual Shader * newShader() = 0;
   virtual Renderpass * newRenderpass(const RenderpassDesc * desc, Result * result) = 0;
   virtual ComputePipeline * newComputePipeline(const ComputePipelineDesc * desc, Result * result) = 0;
@@ -492,13 +569,14 @@ struct Device : public LabeledObject {
   virtual Buffer * newBuffer(const BufferDesc * desc, StorageMode mode, Result * result) = 0;
   virtual RaytracingAS * newRaytracingAS(const RaytracingASDesc * rtDesc, Result * result) = 0;
   virtual Sampler * newSampler(const SamplerDesc * desc, Result * result) = 0;
-  virtual Fence * newFence() = 0;
+  virtual Fence * newFence(Result * result) = 0;
+  virtual Swapchain * newSwapchain(const SwapchainDesc * desc, const Swapchain * old, void * surface, Result * result) = 0;
   virtual Result wait() = 0;
 };
 struct Factory : public Rc {
-  virtual Swapchain * newSwapchain(void * handle, void * reserved) = 0;
   virtual int numDevices() = 0;
   virtual Device * getDevice(uint32 id) = 0;
+  virtual void * newSurface(void * handle) = 0;
 };
 }
 

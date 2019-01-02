@@ -29,6 +29,10 @@ namespace ngfx
             m_map.insert(value);
         }
 
+        void clear() {
+            m_map.clear();
+        }
+
 	private:
 		this_map m_map;
 	};

@@ -63,7 +63,6 @@ namespace ngfx
 		int32_t ref_ext_ = 1;
 	};
 
-
 	template <class T>
 	class Ptr
 	{
@@ -89,7 +88,7 @@ namespace ngfx
 		{
 			return ptr_ != nullptr;
 		}
-		void Swap(Ptr& Other)
+		void swap(Ptr& Other)
 		{
 			T * const pValue = Other.ptr_;
 			Other.ptr_ = ptr_;
@@ -98,14 +97,70 @@ namespace ngfx
 		Ptr& operator=(const Ptr& Other) {
 			typedef Ptr<T> ThisType;
 			if (&Other != this) {
-				ThisType(Other).Swap(*this);
+				ThisType(Other).swap(*this);
 			}
 			return *this;
 		}
-		T* Get() const { return ptr_; }
-		T** GetAddressOf() { return &ptr_;}
+		T* get() const { return ptr_; }
+		T** getAddressOf() { return &ptr_;}
 	private:
 		T* ptr_;
 	};
+    template <class T, typename TResult>
+    class ResultPtr : public Ptr<T>
+    {
+    public:
+        ResultPtr(TResult in_result = TResult::Ok)
+            : Ptr<T>()
+            , result(in_result)
+        {}
+
+        ResultPtr(T* obj, TResult in_result = TResult::Ok)
+            : Ptr<T>(obj)
+            , result(in_result)
+        {}
+
+        TResult result;
+    };
+
+    class RenderHandle
+    {
+    public:
+        // should be less than 15
+        enum Type {
+            Buffer,
+            Texture,
+            Sampler,
+            RenderPass,
+            Pipeline,
+            BindGroup,
+            BufferView,
+            TextureView,
+            Fence,
+            // ..
+            RTAccelerationStructure = 14,
+            TypeMax = 15,
+        };
+
+        RenderHandle() : handle_(0) {}
+
+        static RenderHandle allocate(Type type);
+        static void         free(RenderHandle const& handle);
+
+        inline Type         type() const { return static_cast<Type>(type_); }
+        inline uint64_t     id() const { return id_; }
+        inline uint64_t     handle() const { return handle_; }
+
+        inline bool         operator==(RenderHandle const& other) const { return handle() == other.handle(); }
+
+    private:
+        union {
+            struct {
+                uint64_t type_ : 4;
+                uint64_t id_ : 60;
+            };
+            uint64_t handle_;
+        };
+    };
 }
 #endif

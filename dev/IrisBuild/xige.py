@@ -45,7 +45,7 @@ class Node(object):
 
     def get_attrib(self, name):
         cval = self._dll.node_get_attribute(self._node, name)
-        return cval
+        return c_char_p(cval).value if cval else None
 
     def get_type_flag(self):
         return self._dll.node_get_type_flag(self._node)

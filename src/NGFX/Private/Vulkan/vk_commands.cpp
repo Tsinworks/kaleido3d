@@ -1,7 +1,12 @@
 #include "vk_common.h"
 
 namespace vulkan {
-
+    GpuCommandBuffer::GpuCommandBuffer(GpuQueue * queue)
+    {
+    }
+    GpuCommandBuffer::~GpuCommandBuffer()
+    {
+    }
     ngfx::RenderEncoder* GpuCommandBuffer::newRenderEncoder(ngfx::Result * result)
     {
         return nullptr;
@@ -12,14 +17,14 @@ namespace vulkan {
         return nullptr;
     }
 
-    ngfx::Result GpuCommandBuffer::newBlitEncoder()
+    ngfx::BlitEncoder * GpuCommandBuffer::newBlitEncoder(ngfx::Result * result)
     {
-        return ngfx::Result();
+        return nullptr;
     }
 
-    ngfx::Result GpuCommandBuffer::newParallelRenderEncoder()
+    ngfx::ParallelEncoder * GpuCommandBuffer::newParallelRenderEncoder(ngfx::Result * result)
     {
-        return ngfx::Result();
+        return nullptr;
     }
 
     ngfx::RaytraceEncoder * GpuCommandBuffer::newRaytraceEncoder(ngfx::Result * result)
