@@ -88,7 +88,9 @@ namespace ngfx {
 	[[transient("frame"), refcount("true")]]
 	interface BindGroup {
 		void				setSampler(uint32 id, ShaderStage stage, const Sampler* sampler);
+		void				setSamplers(uint32 id, ShaderStage stage, const array<Texture*>* sampler);
 		void				setTexture(uint32 id, ShaderStage stage, const TextureView* texture);
+		void				setTextures(uint32 id, ShaderStage stage, const array<Texture*>* texture);
 		void				setBuffer(uint32 id, ShaderStage stage, const BufferView* buffer);
 		void				setRaytracingAS(uint32 id, ShaderStage stage, const RaytracingAS* as);
 	};
@@ -133,10 +135,18 @@ namespace ngfx {
         void				endEncode();
     };
     interface RenderEncoder : CommandEncoder {
-        void                setViewport();
-        void                setScissors();
-        void				drawPrimitives();
-        void                drawIndexedPrimitives();
+        void                setViewport(Viewport viewport);
+		void                setViewports(int numViewports, const Viewport* pViewport);
+        void                setScissors(int numScirssors, const Rect* pRects);
+		void				setStencilRef();
+		void				setDepthBias();
+        void				drawPrimitives(PrimitiveType primType, 
+								int vertexStart, int vertexCount, int instanceCount, int baseInstance);
+        void                drawIndexedPrimitives(PrimitiveType primType,
+								IndexType indexType, int indexCount, const Buffer* indexBuffer, int indexBufferOffset,
+								int vertexStart, int vertexCount, int instanceCount, int baseInstance);
+		void				drawIndirect(PrimitiveType primType, 
+								const Buffer* buffer, uint64 offset, uint32 drawCount, uint32 stride);
         void				present(Swapchain* swapchain);
     };
     interface ComputeEncoder : CommandEncoder {
@@ -149,7 +159,6 @@ namespace ngfx {
         Buffer*     buffer;
         uint32      stride;
     };
-
     struct RaytracingAABBs
     {
         uint32 count;

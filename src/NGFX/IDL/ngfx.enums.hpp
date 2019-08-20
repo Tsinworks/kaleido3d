@@ -241,9 +241,9 @@ namespace ngfx {
 
 	enum StorageMode {
 		Auto,
-		OnGpu,
-		OnCpu,
-		Shared
+		Private,
+		Shared,
+		Dedicated
 	};
 
     enum TextureDim {

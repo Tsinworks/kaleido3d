@@ -10,35 +10,34 @@ namespace vulkan {
         memoryRequirementsInfo.accelerationStructure = accel;
         memoryRequirementsInfo.type = VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_NV;
         VkMemoryRequirements2 memoryRequirements = {};
-        if (this->vkGetAccelerationStructureMemoryRequirementsNV) {
-            this->vkGetAccelerationStructureMemoryRequirementsNV(device_, &memoryRequirementsInfo, &memoryRequirements);
+        if (this->__GetAccelerationStructureMemoryRequirementsNV) {
+            this->__GetAccelerationStructureMemoryRequirementsNV(device_, &memoryRequirementsInfo, &memoryRequirements);
         }
         return memoryRequirements.memoryRequirements;
     }
 
-    GpuRaytracingAccelerationStructure::GpuRaytracingAccelerationStructure(const ngfx::RaytracingASDesc& desc, GpuDevice* device)
-        : desc_(desc)
+    GpuRaytracingAccelerationStructure::GpuRaytracingAccelerationStructure(
+		const ngfx::RaytracingASDesc& desc,
+		VkAccelerationStructureNV inAs,
+		GpuAllocator::MemoryItem const& memItem, GpuDevice* device)
+        : acceleration_structure_(inAs)
+		, mem_item_(memItem)
+		, desc_(desc)
         , device_(device)
     {
         create_info_ = {
             VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_NV
         };
-        device_->createAccelerationStructure(&create_info_, &gAllocationCallbacks, &acceleration_structure_);
-        auto memoryRequirements = device_->getAccelerationStructureMemorySize(acceleration_structure_);
-        VkMemoryAllocateInfo memoryAllocateInfo;
-        memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        memoryAllocateInfo.pNext = nullptr;
-        memoryAllocateInfo.allocationSize = memoryRequirements.size;
-        //memoryAllocateInfo.memoryTypeIndex = GetMemoryType(memoryRequirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        //code = vkAllocateMemory(_device, &memoryAllocateInfo, nullptr, &memory);
-
     }
 
     GpuRaytracingAccelerationStructure::~GpuRaytracingAccelerationStructure()
     {
         // destroy
-        device_->destroyAccelerationStructure(acceleration_structure_, &gAllocationCallbacks);
-        acceleration_structure_ = VK_NULL_HANDLE;
+		if (acceleration_structure_ != VK_NULL_HANDLE) {
+			device_->getAllocator().freeAccelerationStructure(acceleration_structure_, mem_item_);
+			device_->destroyAccelerationStructure(acceleration_structure_, NGFXVK_ALLOCATOR);
+			acceleration_structure_ = VK_NULL_HANDLE;
+		}
     }
 
     void GpuRaytracingAccelerationStructure::setLabel(const char * label)
@@ -52,8 +51,19 @@ namespace vulkan {
 
     ngfx::RaytracingAS* GpuDevice::newRaytracingAS(const ngfx::RaytracingASDesc* rtDesc, ngfx::Result * result)
     {
-        return nullptr;
+		VkAccelerationStructureCreateInfoNV as_info = { VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_NV };
+		VkAccelerationStructureNV as = VK_NULL_HANDLE;
+		createAccelerationStructure(&as_info, NGFXVK_ALLOCATOR, &as);
+		auto memoryRequirements = getAccelerationStructureMemorySize(as);
+		VkMemoryAllocateInfo memoryAllocateInfo;
+		memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		memoryAllocateInfo.pNext = nullptr;
+		memoryAllocateInfo.allocationSize = memoryRequirements.size;
+		GpuAllocator::MemoryItem memItem;
+		mem_alloc_.allocateForAccelerationStructure(as, ngfx::StorageMode::OnGpu, memItem);
+        return new GpuRaytracingAccelerationStructure(*rtDesc, as, memItem, this);
     }
+
     GpuRaytracingPipeline::GpuRaytracingPipeline(const ngfx::RaytracePipelineDesc * desc, GpuDevice * device)
         : GpuPipelineBase(device)
     {

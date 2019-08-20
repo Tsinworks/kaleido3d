@@ -6,36 +6,217 @@
 #include "vk_common.h"
 #include <unordered_map>
 
+
 #define VULKAN_STANDARD_LAYER "VK_LAYER_LUNARG_standard_validation"
 
 namespace vulkan {
-    LayerEnumerator gLayerEnumerator;
-
 	GpuDevice::GpuDevice(VkPhysicalDevice device, GpuFactory* factory)
         : physical_device_(device)
         , factory_(factory)
+		, mem_alloc_(this)
 	{
+		VK_PROTO_FN_ZERO(GetDeviceQueue);
+
+		VK_PROTO_FN_ZERO(AllocateMemory);
+		VK_PROTO_FN_ZERO(FreeMemory);
+		VK_PROTO_FN_ZERO(MapMemory);
+		VK_PROTO_FN_ZERO(UnmapMemory);
+		VK_PROTO_FN_ZERO(InvalidateMappedMemoryRanges);
+		VK_PROTO_FN_ZERO(FlushMappedMemoryRanges);
+		VK_PROTO_FN_ZERO(GetImageMemoryRequirements);
+		VK_PROTO_FN_ZERO(GetBufferMemoryRequirements);
+		VK_PROTO_FN_ZERO(BindBufferMemory);
+		VK_PROTO_FN_ZERO(BindImageMemory);
+		VK_PROTO_FN_ZERO(CreateImage);
+		VK_PROTO_FN_ZERO(DestroyImage);
+		VK_PROTO_FN_ZERO(CreateBuffer);
+		VK_PROTO_FN_ZERO(DestroyBuffer);
+		VK_PROTO_FN_ZERO(CreateFence);
+		VK_PROTO_FN_ZERO(DestroyFence);
+
+		// ~ nv raytracing
+		VK_PROTO_FN_ZERO(CreateAccelerationStructureNV);
+		VK_PROTO_FN_ZERO(DestroyAccelerationStructureNV);
+		VK_PROTO_FN_ZERO(GetAccelerationStructureMemoryRequirementsNV);
+		VK_PROTO_FN_ZERO(CreateRayTracingPipelinesNV);
+		VK_PROTO_FN_ZERO(BindAccelerationStructureMemoryNV);
+		VK_PROTO_FN_ZERO(GetAccelerationStructureHandleNV);
+		VK_PROTO_FN_ZERO(CmdBuildAccelerationStructureNV);
+		VK_PROTO_FN_ZERO(GetRayTracingShaderGroupHandlesNV);
+		VK_PROTO_FN_ZERO(CmdTraceRaysNV);
+		// ~ end nv rt
+
+		// ~ debug marker ext
+		VK_PROTO_FN_ZERO(DebugMarkerSetObjectNameEXT);
+		VK_PROTO_FN_ZERO(CmdDebugMarkerBeginEXT);
+		VK_PROTO_FN_ZERO(CmdDebugMarkerEndEXT);
+		VK_PROTO_FN_ZERO(CmdDebugMarkerInsertEXT);
+		// ~ end debug marker ext
+
+		// ~ debug util
+		VK_PROTO_FN_ZERO(SetDebugUtilsObjectNameEXT);
+		VK_PROTO_FN_ZERO(QueueBeginDebugUtilsLabelEXT);
+		VK_PROTO_FN_ZERO(QueueInsertDebugUtilsLabelEXT);
+		VK_PROTO_FN_ZERO(CmdBeginDebugUtilsLabelEXT);
+		VK_PROTO_FN_ZERO(CmdInsertDebugUtilsLabelEXT);
+		VK_PROTO_FN_ZERO(CmdEndDebugUtilsLabelEXT);
+		// ~ end debug util
 	}
 
 	GpuDevice::~GpuDevice()
 	{
-        destroyAllocator();
+		if (device_)
+		{
+			factory_->__DestroyDevice(device_, NGFXVK_ALLOCATOR);
+			device_ = VK_NULL_HANDLE;
+		}
 	}
+
+	void GpuDevice::createDevice()
+	{
+		ExtensionProps extensions;
+		factory_->getDeviceExtensions(physical_device_, extensions);
+
+		HWProps	    properties = {};
+		HWFeatures	features = {};
+		QueueProps	queueProps;
+		factory_->getDeviceProps(physical_device_, properties, features, queueProps);
+
+		LayerProps layerProps;
+		factory_->getDeviceLayers(physical_device_, layerProps);
+
+		ngfx::Vec<const char*> required_extensions;
+		ngfx::Vec<const char*> requiredLayers;
+
+		if (extensions.hasExtension(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME)) {
+			bool nonUniformIndexing = false;
+			factory_->checkNonUniformIndexing(physical_device_, nonUniformIndexing);
+			required_extensions.push(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
+			if (nonUniformIndexing) {
+			}
+		}
+
+		if (extensions.hasExtension(VK_NV_RAY_TRACING_EXTENSION_NAME)) {
+			bool nvRaytracingExists = false;
+			factory_->checkNVRaytracing(physical_device_, nvRaytracingExists);
+			required_extensions.push(VK_NV_RAY_TRACING_EXTENSION_NAME);
+			if (nvRaytracingExists) {
+				support_raytracing_ = nvRaytracingExists;
+			}
+		}
+
+		queues_info_.graphics.queueFamilyIndex = getQueueFamilyIndex(queueProps, VK_QUEUE_GRAPHICS_BIT);
+		queues_info_.compute.queueFamilyIndex = getQueueFamilyIndex(queueProps, VK_QUEUE_COMPUTE_BIT);
+		queues_info_.transfer.queueFamilyIndex = getQueueFamilyIndex(queueProps, VK_QUEUE_TRANSFER_BIT);
+
+		ngfx::Vec<VkDeviceQueueCreateInfo> queue_infos;
+		float priority = 0.0f;
+		VkDeviceQueueCreateInfo queue_info = { VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
+		queue_info.queueFamilyIndex = queues_info_.graphics.queueFamilyIndex;
+		queue_info.queueCount = 1;
+		queue_info.pQueuePriorities = &priority;
+
+		queue_infos.push(queue_info);
+
+		if (queues_info_.graphics.queueFamilyIndex != queues_info_.compute.queueFamilyIndex)
+		{
+			queue_info.queueFamilyIndex = queues_info_.compute.queueFamilyIndex;
+			queue_infos.push(queue_info);
+		}
+		if (queues_info_.transfer.queueFamilyIndex != queues_info_.graphics.queueFamilyIndex &&
+			queues_info_.transfer.queueFamilyIndex != queues_info_.compute.queueFamilyIndex)
+		{
+			queue_info.queueFamilyIndex = queues_info_.transfer.queueFamilyIndex;
+			queue_infos.push(queue_info);
+		}
+		if (factory_->debuggable()) {
+			if (extensions.hasExtension(VK_EXT_DEBUG_MARKER_EXTENSION_NAME)) {
+				required_extensions.push(VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
+			}
+			requiredLayers.push(VULKAN_STANDARD_LAYER);
+		}
+		VkDeviceCreateInfo device_info = {
+			VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, nullptr, 0,
+			queue_infos.num(), &queue_infos[0],// queueCreateInfoCount queueCreateInfo
+			requiredLayers.num(), &requiredLayers[0],// layerCount, layer
+			required_extensions.num(), &required_extensions[0],// extensionCount, extensions
+			&features// features
+		};
+		VkResult result = factory_->__CreateDevice(physical_device_, &device_info, NGFXVK_ALLOCATOR, &device_);
+		check(result == VK_SUCCESS);
+
+		if (result == VK_SUCCESS) {
+			loadDeviceFunctions();
+			mem_alloc_.init();
+		} else {
+			factory_->printLogStr(-1, "failed to initialize device!\n");
+		}
+	}
+
+	void GpuDevice::loadDeviceFunctions()
+	{
+#define VK_DEVICE_FN_RSV(name)	__##name = (PFN_vk##name)factory_->__GetDeviceProcAddr(device_, "vk" ## #name)
+		VK_DEVICE_FN_RSV(GetDeviceQueue);
+
+		VK_DEVICE_FN_RSV(AllocateMemory);
+		VK_DEVICE_FN_RSV(FreeMemory);
+		VK_DEVICE_FN_RSV(MapMemory);
+		VK_DEVICE_FN_RSV(UnmapMemory);
+		VK_DEVICE_FN_RSV(InvalidateMappedMemoryRanges);
+		VK_DEVICE_FN_RSV(FlushMappedMemoryRanges);
+		VK_DEVICE_FN_RSV(GetImageMemoryRequirements);
+		VK_DEVICE_FN_RSV(GetBufferMemoryRequirements);
+		VK_DEVICE_FN_RSV(BindBufferMemory);
+		VK_DEVICE_FN_RSV(BindImageMemory);
+		VK_DEVICE_FN_RSV(CreateImage);
+		VK_DEVICE_FN_RSV(DestroyImage);
+		VK_DEVICE_FN_RSV(CreateBuffer);
+		VK_DEVICE_FN_RSV(DestroyBuffer);
+		VK_DEVICE_FN_RSV(CreateFence);
+		VK_DEVICE_FN_RSV(DestroyFence);
+
+		// ~ nv raytracing
+		if (support_raytracing_)
+		{
+			VK_DEVICE_FN_RSV(CreateAccelerationStructureNV);
+			VK_DEVICE_FN_RSV(DestroyAccelerationStructureNV);
+			VK_DEVICE_FN_RSV(GetAccelerationStructureMemoryRequirementsNV);
+			VK_DEVICE_FN_RSV(CreateRayTracingPipelinesNV);
+			VK_DEVICE_FN_RSV(BindAccelerationStructureMemoryNV);
+			VK_DEVICE_FN_RSV(GetAccelerationStructureHandleNV);
+			VK_DEVICE_FN_RSV(CmdBuildAccelerationStructureNV);
+			VK_DEVICE_FN_RSV(GetRayTracingShaderGroupHandlesNV);
+			VK_DEVICE_FN_RSV(CmdTraceRaysNV);
+		}
+		// ~ end nv rt
+
+		if (factory_->debuggable()) {
+			VK_DEVICE_FN_RSV(DebugMarkerSetObjectNameEXT);
+			VK_DEVICE_FN_RSV(CmdDebugMarkerBeginEXT);
+			VK_DEVICE_FN_RSV(CmdDebugMarkerEndEXT);
+			VK_DEVICE_FN_RSV(CmdDebugMarkerInsertEXT);
+		}
+#undef VK_DEVICE_FN_RSV
+	}
+
     void GpuDevice::setLabel(const char * label)
     {
     }
-    const char * GpuDevice::label() const
+    
+	const char * GpuDevice::label() const
     {
         return nullptr;
     }
+
     ngfx::DeviceType GpuDevice::getType() const
     {
         return device_type_;
     }
-	ngfx::CommandQueue* GpuDevice::newQueue(ngfx::Result * result)
+
+	ngfx::CommandQueue* GpuDevice::newQueue(ngfx::Result* result)
 	{
         VkQueue queue = VK_NULL_HANDLE;
-        this->vkGetDeviceQueue(device_, 0, 0, &queue);
+        this->__GetDeviceQueue(device_, 0, 0, &queue);
 		return new GpuQueue(queue, this);
 	}
     
@@ -54,22 +235,13 @@ namespace vulkan {
         fence_ = VK_NULL_HANDLE;
     }
 
-    void GpuFence::setLabel(const char * label)
+    void GpuFence::setLabel(const char* label)
     {
     }
 
-    const char * GpuFence::label() const
+    const char* GpuFence::label() const
     {
         return nullptr;
-    }
-
-    VkResult GpuDevice::createFence(const VkFenceCreateInfo & info, VkFence * pFence)
-    {
-        return this->vkCreateFence(device_, &info, &gAllocationCallbacks, pFence);
-    }
-    void GpuDevice::destroyFence(VkFence fence)
-    {
-        this->vkDestroyFence(device_, fence, &gAllocationCallbacks);
     }
 
     bool GpuDevice::querySurfaceInfo(VkSurfaceKHR surface, GpuDevice::SurfaceInfo& info)
@@ -96,6 +268,7 @@ namespace vulkan {
 	{
 		return nullptr;
 	}
+
 	ngfx::Renderpass* GpuDevice::newRenderpass(const ngfx::RenderpassDesc * desc, ngfx::Result * result)
 	{
 		return nullptr;
@@ -113,356 +286,64 @@ namespace vulkan {
 		return ngfx::Result();
 	}
 
-    void GpuDevice::DevicePropsScope::init(VkPhysicalDevice device)
-    {
-        vkGetPhysicalDeviceFeatures(device, &features);
-        vkGetPhysicalDeviceProperties(device, &properties);
+	GpuAllocator& GpuDevice::getAllocator()
+	{
+		return mem_alloc_;
+	}
 
-        uint32_t queue_family_count;
-        vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, nullptr);
-        queue_props_.resize(queue_family_count);
-        vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, &queue_props_[0]);
-
-        uint32_t num_dev_layers = 0;
-        vkEnumerateDeviceLayerProperties(device, &num_dev_layers, nullptr);
-        if (num_dev_layers > 0) {
-            ngfx::Vec<VkLayerProperties> layer_props;
-            layer_props.resize(num_dev_layers);
-            vkEnumerateDeviceLayerProperties(device, &num_dev_layers, &layer_props[0]);
-
-            // list device supported extensions
-            uint32_t num_prop = 0;
-            vkEnumerateDeviceExtensionProperties(device, nullptr, &num_prop, nullptr);
-            if (num_prop > 0) {
-                ngfx::Vec<VkExtensionProperties> ext_props;
-                ext_props.resize(num_prop);
-                vkEnumerateDeviceExtensionProperties(device, nullptr, &num_prop, &ext_props[0]);
-                for (auto& ext_prop : ext_props) {
-                    extensions_.push({ ext_prop.extensionName, ext_prop });
-                }
-            }
-        }
-
-        queues_info.graphics.queueFamilyIndex = getQueueFamilyIndex(device, VK_QUEUE_GRAPHICS_BIT);
-        queues_info.compute.queueFamilyIndex = getQueueFamilyIndex(device, VK_QUEUE_COMPUTE_BIT);
-        queues_info.transfer.queueFamilyIndex = getQueueFamilyIndex(device, VK_QUEUE_TRANSFER_BIT);
-    }
-
-    bool GpuDevice::DevicePropsScope::hasExtension(std::string const & ext) const
-    {
-        return extensions_.contains(ext);
-    }
-
-    GpuDevice::DevicePropsScope::DevicePropsScope(VkPhysicalDevice device)
-    {
-        init(device);
-    }
-
-    GpuDevice::DevicePropsScope::~DevicePropsScope()
-    {
-        extensions_.clear();
-        queue_props_.clear();
-    }
-
-    int GpuDevice::DevicePropsScope::getQueueFamilyIndex(VkPhysicalDevice device, VkQueueFlags queueFlag)
-    {
-        if (queueFlag & VK_QUEUE_COMPUTE_BIT)
-        {
-            for (uint32_t i = 0; i < queue_props_.num(); ++i)
-            {
-                if ((queue_props_[i].queueFlags & VK_QUEUE_COMPUTE_BIT) &&
-                    !(queue_props_[i].queueFlags & VK_QUEUE_GRAPHICS_BIT))
-                {
-                    return i;
-                }
-            }
-        }
-        if (queueFlag & VK_QUEUE_TRANSFER_BIT)
-        {
-            for (uint32_t i = 0; i < queue_props_.num(); ++i)
-            {
-                if ((queue_props_[i].queueFlags & VK_QUEUE_TRANSFER_BIT) &&
-                    !(queue_props_[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) &&
-                    !(queue_props_[i].queueFlags & VK_QUEUE_COMPUTE_BIT))
-                {
-                    return i;
-                }
-            }
-        }
-        for (uint32_t i = 0; i < queue_props_.num(); ++i)
-        {
-            if (queue_props_[i].queueFlags & queueFlag)
-            {
-                return i;
-            }
-        }
-        return 0;
-    }
-
-    VkResult GpuDevice::createAccelerationStructure(
-        const VkAccelerationStructureCreateInfoNV * pCreateInfo, 
-        const VkAllocationCallbacks * pAllocator, 
-        VkAccelerationStructureNV * pAccelerationStructure)
-    {
-        if (this->vkCreateAccelerationStructureNV) {
-            return this->vkCreateAccelerationStructureNV(device_, pCreateInfo, pAllocator, pAccelerationStructure);
-        }
-        return VkResult::VK_ERROR_INITIALIZATION_FAILED;
-    }
-
-    void GpuDevice::destroyAccelerationStructure(VkAccelerationStructureNV accelerationStructure, const VkAllocationCallbacks * pAllocator)
-    {
-        if (this->vkDestroyAccelerationStructureNV) {
-            this->vkDestroyAccelerationStructureNV(device_, accelerationStructure, pAllocator);
-        }
-    }
-
-
-    void GpuDevice::createDevice()
-    {
-        DevicePropsScope props_scope(physical_device_);
-
-        std::vector<const char*> required_extensions;
-        if (vkGetPhysicalDeviceProperties2) {
-            VkPhysicalDeviceDescriptorIndexingFeaturesEXT descriptorIndexing = { };
-            descriptorIndexing.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT;
-            VkPhysicalDeviceFeatures2 features2 = { };
-            features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-            if (props_scope.hasExtension(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME)) {
-                features2.pNext = &descriptorIndexing;
-                vkGetPhysicalDeviceFeatures2(physical_device_, &features2);
-                required_extensions.push_back(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
-            }
-            if (props_scope.hasExtension(VK_NV_RAY_TRACING_EXTENSION_NAME)) {
-                ray_tracing_props_.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_NV;
-                ray_tracing_props_.pNext = nullptr;
-                ray_tracing_props_.maxRecursionDepth = 0;
-                ray_tracing_props_.shaderGroupHandleSize = 0;
-                VkPhysicalDeviceProperties2 props;
-                props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-                props.pNext = &ray_tracing_props_;
-                props.properties = { };
-                vkGetPhysicalDeviceProperties2(physical_device_, &props);
-                support_raytracing_ = true;
-                required_extensions.push_back(VK_NV_RAY_TRACING_EXTENSION_NAME);
-            }
-        }
-
-        std::vector<VkDeviceQueueCreateInfo> queue_infos;
-        float priority = 0.0f;
-        VkDeviceQueueCreateInfo queue_info = { VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
-        queue_info.queueFamilyIndex = props_scope.queues_info.graphics.queueFamilyIndex;
-        queue_info.queueCount = 1;
-        queue_info.pQueuePriorities = &priority;
-        queue_infos.push_back(queue_info);
-        if (props_scope.queues_info.graphics.queueFamilyIndex != props_scope.queues_info.compute.queueFamilyIndex)
-        {
-            queue_info.queueFamilyIndex = props_scope.queues_info.compute.queueFamilyIndex;
-            queue_infos.push_back(queue_info);
-        }
-        if (props_scope.queues_info.transfer.queueFamilyIndex != props_scope.queues_info.graphics.queueFamilyIndex &&
-            props_scope.queues_info.transfer.queueFamilyIndex != props_scope.queues_info.compute.queueFamilyIndex)
-        {
-            queue_info.queueFamilyIndex = props_scope.queues_info.transfer.queueFamilyIndex;
-            queue_infos.push_back(queue_info);
-        }
-        if (factory_->debuggable()) {
-
-        }
-        VkDeviceCreateInfo device_info = {
-            VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, nullptr, 0,
-            queue_infos.size(), queue_infos.data(),// queueCreateInfoCount queueCreateInfo
-            0, nullptr,// layerCount, layer
-            required_extensions.size(), required_extensions.data(),// extensionCount, extensions
-            &props_scope.features// features
-        };
-        VkResult ret = vkCreateDevice(physical_device_, &device_info, &gAllocationCallbacks, &device_);
-        volkLoadDeviceTable(this, device_);
-        // detect extensions
-        postCreateDevice();
-    }
-
-    void GpuDevice::postCreateDevice()
-    {
-        initAllocator();
-    }
+	int GpuDevice::getQueueFamilyIndex(QueueProps& queueProps, VkQueueFlags queueFlag)
+	{
+		if (queueFlag & VK_QUEUE_COMPUTE_BIT)
+		{
+			for (uint32_t i = 0; i < queueProps.num(); ++i)
+			{
+				if ((queueProps[i].queueFlags & VK_QUEUE_COMPUTE_BIT) &&
+					!(queueProps[i].queueFlags & VK_QUEUE_GRAPHICS_BIT))
+				{
+					return i;
+				}
+			}
+		}
+		if (queueFlag & VK_QUEUE_TRANSFER_BIT)
+		{
+			for (uint32_t i = 0; i < queueProps.num(); ++i)
+			{
+				if ((queueProps[i].queueFlags & VK_QUEUE_TRANSFER_BIT) &&
+					!(queueProps[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) &&
+					!(queueProps[i].queueFlags & VK_QUEUE_COMPUTE_BIT))
+				{
+					return i;
+				}
+			}
+		}
+		for (uint32_t i = 0; i < queueProps.num(); ++i)
+		{
+			if (queueProps[i].queueFlags & queueFlag)
+			{
+				return i;
+			}
+		}
+		return 0;
+	}
 
     GpuQueue::GpuQueue(VkQueue queue, GpuDevice* device)
         : queue_(queue)
         , device_(device)
     {
     }
-    GpuQueue::~GpuQueue()
+    
+	GpuQueue::~GpuQueue()
     {
     }
+
     ngfx::CommandBuffer* GpuQueue::newCommandBuffer()
     {
         return nullptr;
     }
 
-    GpuFactory::GpuFactory(VkInstance instance, bool debug_enable, ngfx_LogCallback log_call)
-        : instance_(instance)
-        , debug_enable_(debug_enable)
-        , log_call_(log_call)
-    {
-        volkLoadInstance(instance_);
-        for (auto& physical_device : enumPhysicalDevices()) {
-            auto device = new GpuDevice(physical_device, this);
-            iptr<GpuDevice> ptr_device(device);
-            device->createDevice();
-            if (device->isValid()) {
-                devices_.push(ptr_device);
-            }
-        }
-    }
-
-    GpuFactory::~GpuFactory()
-    {
-    }
-
-    int GpuFactory::numDevices()
-    {
-        return devices_.num();
-    }
-    ngfx::Device * GpuFactory::getDevice(ngfx::uint32 id)
-    {
-        return devices_[id].get();
-    }
-    void* GpuFactory::newSurface(void * handle)
-    {
-        VkSurfaceKHR surface;
-        VkWin32SurfaceCreateInfoKHR surfaceCreateInfo = { VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR };
-        //surfaceCreateInfo.hinstance = _windowInfo.WindowInstance;
-        surfaceCreateInfo.hwnd = reinterpret_cast<HWND>(handle);
-        VkResult code = vkCreateWin32SurfaceKHR(instance_, &surfaceCreateInfo, &gAllocationCallbacks, &surface);
-
-        //PFN_vkGetPhysicalDeviceSurfaceSupportKHR vkGetPhysicalDeviceSurfaceSupportKHR;
-        //NVVK_RESOLVE_INSTANCE_FUNCTION_ADDRESS(_instance, vkGetPhysicalDeviceSurfaceSupportKHR);
-
-        //VkBool32 supportPresent = VK_FALSE;
-        //code = vkGetPhysicalDeviceSurfaceSupportKHR(_physicalDevice, _queuesInfo.Graphics.QueueFamilyIndex, _surface, &supportPresent);
-        /*
-        NVVK_CHECK_ERROR(code, L"vkGetPhysicalDeviceSurfaceSupportKHR");
-        if (!supportPresent)
-        {
-            ExitError(L"Graphics queue does not support presenting");
-        }
-        */
-
-       /* 
-       PFN_vkGetPhysicalDeviceSurfaceFormatsKHR vkGetPhysicalDeviceSurfaceFormatsKHR;
-        NVVK_RESOLVE_INSTANCE_FUNCTION_ADDRESS(_instance, vkGetPhysicalDeviceSurfaceFormatsKHR);
-
-        uint32_t formatCount;
-        vkGetPhysicalDeviceSurfaceFormatsKHR(_physicalDevice, _surface, &formatCount, nullptr);
-        std::vector<VkSurfaceFormatKHR> surfaceFormats(formatCount);
-        vkGetPhysicalDeviceSurfaceFormatsKHR(_physicalDevice, _surface, &formatCount, surfaceFormats.data());
-
-        if (formatCount == 1 && surfaceFormats[0].format == VK_FORMAT_UNDEFINED)
-        {
-            _surfaceFormat.format = _settings.DesiredSurfaceFormat;
-            _surfaceFormat.colorSpace = surfaceFormats[0].colorSpace;
-        }
-        else
-        {
-            bool found = false;
-            for (auto& surfaceFormat : surfaceFormats)
-            {
-                if (surfaceFormat.format == _settings.DesiredSurfaceFormat)
-                {
-                    _surfaceFormat = surfaceFormat;
-                    found = true;
-                    break;
-                }
-            }
-            if (!found)
-            {
-                _surfaceFormat = surfaceFormats[0];
-            }
-        }*/
-        return (void*)surface;
-    }
-    bool GpuFactory::debuggable() const
-    {
-        return debug_enable_;
-    }
-    ngfx::Vec<VkPhysicalDevice> GpuFactory::enumPhysicalDevices()
-    {
-        ngfx::Vec<VkPhysicalDevice> ret;
-        uint32_t num_devs = 0;
-        vkEnumeratePhysicalDevices(instance_, &num_devs, nullptr);
-        if (num_devs > 0) {
-            ret.resize(num_devs);
-            vkEnumeratePhysicalDevices(instance_, &num_devs, &ret[0]);
-        }
-        return ret;
-    }
-    void LayerEnumerator::init()
-    {
-        // list layers
-        uint32_t num_layers = 0;
-        vkEnumerateInstanceLayerProperties(&num_layers, nullptr);
-        ngfx::Vec<VkLayerProperties> layer_props;
-        if (num_layers > 0) {
-            layer_props.resize(num_layers);
-            vkEnumerateInstanceLayerProperties(&num_layers, &layer_props[0]);
-            for (auto& layer_prop : layer_props) {
-                layer_props_.push({ layer_prop.layerName, layer_prop });
-            }
-        }
-
-        // list default instance extensions
-        uint32_t num_props = 0;
-        vkEnumerateInstanceExtensionProperties(nullptr, &num_props, nullptr);
-        ngfx::Vec<VkExtensionProperties> ext_props;
-        if (num_props > 0) {
-            ext_props.resize(num_props);
-            vkEnumerateInstanceExtensionProperties(nullptr, &num_props, &ext_props[0]);
-            for (auto& ext_prop : ext_props) {
-                ext_props_.push({ ext_prop.extensionName, ext_prop });
-            }
-        }
-    }
-    bool LayerEnumerator::hasLayer(std::string const & layer_name) const
-    {
-        return layer_props_.contains(layer_name);
-    }
-    bool LayerEnumerator::hasExtension(std::string const & extension_name) const
-    {
-        return ext_props_.contains(extension_name);
-    }
 }
 
 ngfx::Factory* CreateFactory(bool debug_layer_enable, ngfx_LogCallback log_call)
 {
-    volkInitialize();
-    // find all layers and extensions
-    vulkan::gLayerEnumerator.init();
-
-    VkInstance instance = VK_NULL_HANDLE;
-    VkApplicationInfo appInfo = { VK_STRUCTURE_TYPE_APPLICATION_INFO, nullptr, 
-        "ngfx_vulkan", 1,
-        "ngfx", 1,
-        volkGetInstanceVersion()
-    };
-    VkInstanceCreateInfo instanceInfo = { VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, nullptr,
-        0, &appInfo
-    };
-    std::vector<const char*> required_layers;
-    std::vector<const char*> required_extensions;
-    if (debug_layer_enable) {
-        if (vulkan::gLayerEnumerator.hasLayer(VULKAN_STANDARD_LAYER)) {
-            required_layers.push_back(VULKAN_STANDARD_LAYER);
-        }
-        if (vulkan::gLayerEnumerator.hasExtension(VK_EXT_DEBUG_REPORT_EXTENSION_NAME)) {
-            required_extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
-        }
-    }
-    instanceInfo.enabledLayerCount = required_layers.size();
-    instanceInfo.ppEnabledLayerNames = required_layers.data();
-    instanceInfo.enabledExtensionCount = required_extensions.size();
-    instanceInfo.ppEnabledExtensionNames = required_extensions.data();
-
-    VkResult result = vkCreateInstance(&instanceInfo, &vulkan::gAllocationCallbacks, &instance);
-    return new vulkan::GpuFactory(instance, debug_layer_enable, log_call);
+    return new vulkan::GpuFactory(VK_NULL_HANDLE, debug_layer_enable, log_call);
 }

@@ -574,6 +574,7 @@ struct Device : public LabeledObject {
   virtual Result wait() = 0;
 };
 struct Factory : public Rc {
+	virtual void init() = 0;
   virtual int numDevices() = 0;
   virtual Device * getDevice(uint32 id) = 0;
   virtual void * newSurface(void * handle) = 0;

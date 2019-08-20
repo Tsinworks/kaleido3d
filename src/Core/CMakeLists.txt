@@ -84,7 +84,7 @@ elseif(WIN32)
     file(GLOB WINDOWS_IMPL_SRCS "../Platform/Microsoft/Win32/*.cpp" "../Platform/Microsoft/Win32/*.h")
     source_group("XPlatform\\Windows" FILES ${WINDOWS_IMPL_SRCS} ${Core_RC})
     set(CORE_SRCS ${CORE_SRCS} ${WINDOWS_IMPL_SRCS} ${Core_RC} ${MATH_SRCS})
-    list(APPEND CORE_DEP_LIBS pcre2)
+    #list(APPEND CORE_DEP_LIBS pcre2)
 elseif(ANDROID)
     file(GLOB ANDROID_SRCS "../Platform/Android/cpp/*.cpp" "../Platform/Android/cpp/*.h")
     source_group("XPlatform\\Android" FILES ${ANDROID_SRCS})
@@ -110,9 +110,11 @@ endif()
 
 k3d_add_lib(Core SRCS ${CORE_SRCS} LIBS ${CORE_DEP_LIBS} FOLDER "Runtime"
     PCH "CoreMinimal.h"
-    PCH_SRC "${Kaleido3D_ROOT_DIR}/Source/Core/XPlatform/Os.cpp"
-    PCH_INCLUDE "${Kaleido3D_ROOT_DIR}/Source/Core"
+    PCH_SRC "${CMAKE_SOURCE_DIR}/src/Core/XPlatform/Os.cpp"
+    PCH_INCLUDE "${CMAKE_SOURCE_DIR}/src/Core"
 )
+
+target_compile_definitions(Kaleido3D.Core PRIVATE LIB_BUILD=1)
 
 install(TARGETS Kaleido3D.Core 
     ARCHIVE DESTINATION lib

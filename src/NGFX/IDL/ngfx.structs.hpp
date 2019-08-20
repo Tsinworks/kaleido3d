@@ -41,6 +41,22 @@ namespace ngfx {
     struct BlendState {
        array<RenderTargetBlendState, 8> renderTargets;
     };
+	struct Rect
+	{
+		uint32 x;
+		uint32 y;
+		uint32 width;
+		uint32 height;
+	};
+	struct Viewport
+	{
+		float x;
+		float y;
+		float width;
+		float height;
+		float near;
+		float far;
+	};
 	struct VertexLayout {
 		VertexInputRate		inputRate;
 		uint32				stride;

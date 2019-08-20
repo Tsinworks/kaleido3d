@@ -24,10 +24,26 @@
 #pragma once
 
 #include <ngfx.h>
-
 #include "volk.h"
+#define VULKAN_HPP_NO_EXCEPTIONS 1
+//#include "vulkan/vulkan.hpp"
+#include "CoreMinimal.h"
+#define check(x) assert(x)
 
-VK_DEFINE_HANDLE(VmaAllocator)
+#define USE_CUSTOM_ALLOCATOR 0
+#if USE_CUSTOM_ALLOCATOR
+#define NGFXVK_ALLOCATOR &gAllocationCallbacks
+#else
+#define NGFXVK_ALLOCATOR  nullptr
+#endif
+
+#define VK_PROTO_FN(name)		PFN_vk##name __##name
+#define VK_PROTO_FN_ZERO(name)	__##name = NULL;
+#define VK_CALL(name, ...)		__##name(__VAR_ARGS__)
+#define VK_FN_RSV(name)			__##name = (PFN_vk##name)soloader_.ResolveSymbol("vk" ## #name)
+
+#define VK_INST_FN_RSV(name)	__##name = (PFN_vk##name)__GetInstanceProcAddr(instance_, "vk" ## #name)
+
 
 #define NGFX_EXPORT __declspec(dllexport)
 
@@ -101,36 +117,38 @@ namespace vulkan {
     {
         using MemProps = VkPhysicalDeviceMemoryProperties;
     public:
+		struct MemoryItem
+		{
+			VkDeviceMemory mem;
+			VkDeviceSize offset;
+		};
+
         GpuAllocator(GpuDevice* device);
         ~GpuAllocator();
 
+		int getMemoryTypeIndex(int typeBits, VkMemoryPropertyFlags properties, bool& memTypeFound);
+
+		ngfx::Result allocateForBuffer(VkBuffer buffer, ngfx::StorageMode mode, MemoryItem& memItem);
+		ngfx::Result allocateForImage(VkImage image, ngfx::StorageMode mode, MemoryItem& memItem);
+		/*
+		 * also need to know scratch buffer size 
+		 */
+		ngfx::Result allocateForAccelerationStructure(VkAccelerationStructureNV accelerationStructure, ngfx::StorageMode mode, MemoryItem& memItem);
+
+		void freeBuffer(VkBuffer buffer, MemoryItem const& item);
+		void freeImage(VkImage buffer, MemoryItem const& item);
+		void freeAccelerationStructure(VkAccelerationStructureNV accelerationStructure, MemoryItem const& item);
+
+		friend class GpuDevice;
     private:
+		void init();
+
         GpuDevice*                  device_;
-        MemProps                    device_mem_props_;
-    };
-
-    class LayerEnumerator
-    {
-        using LayerMap = ngfx::HashMap<std::string, VkLayerProperties>;
-        using ExtensionMap = ngfx::HashMap<std::string, VkExtensionProperties>;
-    public:
-        LayerEnumerator() = default;
-        ~LayerEnumerator() = default;
-
-        void                        init();
-
-        bool                        hasLayer(std::string const& layer_name) const;
-        bool                        hasExtension(std::string const& extension_name) const;
-
-    private:
-        LayerMap                    layer_props_;
-        ExtensionMap                ext_props_;
+		MemProps                    device_mem_props_ = {};
     };
 
     extern Allocator                gAllocator;
     extern VkAllocationCallbacks    gAllocationCallbacks;
-    extern LayerEnumerator          gLayerEnumerator;
-
 
     struct QueueInfo
     {
@@ -145,46 +163,75 @@ namespace vulkan {
         QueueInfo transfer;
     };
 
+	class ExtensionProps : public ngfx::Vec<VkExtensionProperties>
+	{
+	public:
+		bool hasExtension(const char* extName) const;
+	};
+
+	class LayerProps : public ngfx::Vec<VkLayerProperties>
+	{
+	public:
+		bool hasLayer(const char* layerName) const;
+	};
+
 	class GpuFactory : public ngfx::Factory
 	{
+		using LayerMap = ngfx::HashMap<std::string, VkLayerProperties>;
+		using ExtensionMap = ngfx::HashMap<std::string, VkExtensionProperties>;
 	public:
         GpuFactory(VkInstance instance, bool enable_debug, ngfx_LogCallback log_call);
         ~GpuFactory() override;
+		void init() override;
+
+		void                        enumerateExtensions();
+
+		void						getDeviceProps(VkPhysicalDevice device,
+										VkPhysicalDeviceProperties& deviceProps,
+										VkPhysicalDeviceFeatures& deviceFeatures,
+										ngfx::Vec<VkQueueFamilyProperties>& queueProps);
+		void						getDeviceExtensions(VkPhysicalDevice device, ngfx::Vec<VkExtensionProperties>& extProps);
+		void						getDeviceLayers(VkPhysicalDevice device, ngfx::Vec<VkLayerProperties>& layerProps);
+
+		bool                        hasLayer(std::string const& layer_name) const;
+		bool                        hasExtension(std::string const& extension_name) const;
+
+		void						checkNonUniformIndexing(VkPhysicalDevice device, bool& nonUniformIndex);
+		void						checkNVRaytracing(VkPhysicalDevice device, bool& nvRaytracing);
+
         int                         numDevices() override;
         ngfx::Device *              getDevice(ngfx::uint32 id) override;
         void*                       newSurface(void* handle) override;
         bool                        debuggable() const;
-    private:
-        ngfx::Vec<VkPhysicalDevice> enumPhysicalDevices();
 
-        VkInstance                  instance_;
+		void						printLogStr(int level, const char* msg);
+	
+		friend class GpuDevice;
+	private:
+		void enumPhysicalDevices();
+		void loadInstanceFunctions();
+
+	private:
+		k3d::os::LibraryLoader		soloader_;
+		LayerMap                    layer_props_;
+		ExtensionMap                ext_props_;
+		VkInstance					instance_;
         bool                        debug_enable_;
         ngfx_LogCallback            log_call_;
         ngfx::Vec<iptr<GpuDevice>>  devices_;
+		ngfx::Vec<VkPhysicalDevice> physical_devices_;
+
+	private: // instance procs here
+#include "instance_procs.inl"
 	};
 
-	class GpuDevice : public ngfx::Device, public VolkDeviceTable
+	class GpuDevice : public ngfx::Device/*, public VolkDeviceTable*/
 	{
         using RtProps = VkPhysicalDeviceRayTracingPropertiesNV;
         using HWProps = VkPhysicalDeviceProperties;
         using HWFeatures = VkPhysicalDeviceFeatures;
         using QueueProps = ngfx::Vec<VkQueueFamilyProperties>;
         using ExtensionMap = ngfx::HashMap<std::string, VkExtensionProperties>;
-
-        struct DevicePropsScope
-        {
-            DevicePropsScope(VkPhysicalDevice device);
-            ~DevicePropsScope();
-            bool                    hasExtension(std::string const& ext) const;
-            HWProps	                properties = {};
-            HWFeatures	            features = {};
-            QueuesInfo              queues_info = {};
-        private:
-            void                    init(VkPhysicalDevice device);
-            int                     getQueueFamilyIndex(VkPhysicalDevice device, VkQueueFlags queueFlag);
-            QueueProps              queue_props_;
-            ExtensionMap            extensions_;
-        };
 
 	public:
 		GpuDevice(VkPhysicalDevice device, GpuFactory* factory);
@@ -208,18 +255,46 @@ namespace vulkan {
 
         bool                        isValid() const { return device_ != VK_NULL_HANDLE; }
 
+		GpuAllocator&				getAllocator();
+
         friend class                GpuCommandBuffer;
         friend class                GpuFactory;
 
     public:
+		void						getPhysicalDeviceMemoryProperties(VkPhysicalDeviceMemoryProperties& memProps);
+
+		VkResult					allocateMemory(const VkMemoryAllocateInfo* pAllocateInfo, VkDeviceMemory* pMemory);
+		void						freeMemory(VkDeviceMemory memory);
+
+		void*						mapMemory(VkDeviceMemory mem, VkDeviceSize offset, VkDeviceSize size, VkMemoryMapFlags flags);
+		void						flushMappedMemory(uint32_t memoryRangeCount, const VkMappedMemoryRange* pMemoryRanges);
+		void						invalidMappedMemory(uint32_t memoryRangeCount, const VkMappedMemoryRange* pMemoryRanges);
+		void						unmapMemory(VkDeviceMemory mem);
+
+		VkResult					createBuffer(const VkBufferCreateInfo* pCreateInfo, VkBuffer* pBuffer);
+		void						destroyBuffer(VkBuffer buffer);
+		void						getBufferMemoryRequirements(VkBuffer buffer, VkMemoryRequirements* pMemoryRequirements);
+
+		VkResult					createImage(const VkImageCreateInfo* pCreateInfo, VkImage* pImage);
+		void						destroyImage(VkImage image);
+		void						getImageMemoryRequirements(VkImage image, VkMemoryRequirements* pMemoryRequirements);
+		
+		VkResult					createSampler(const VkSamplerCreateInfo* pCreateInfo, VkSampler* pSampler);
+		void						destroySampler(VkSampler sampler);
+
+		// VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_NV
+		// VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_NV
+		// VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_UPDATE_SCRATCH_NV
+		void						getAccelerationStructureMemoryRequirements(VkAccelerationStructureNV accelerationStructure, 
+										VkAccelerationStructureMemoryRequirementsTypeNV type, 
+										VkMemoryRequirements2KHR* pMemoryRequirements);
         VkResult                    createAccelerationStructure(const VkAccelerationStructureCreateInfoNV* pCreateInfo, 
                                         const VkAllocationCallbacks* pAllocator, 
                                         VkAccelerationStructureNV* pAccelerationStructure);
-        
         void                        destroyAccelerationStructure(VkAccelerationStructureNV accelerationStructure,
                                         const VkAllocationCallbacks * pAllocator);
-
         VkMemoryRequirements        getAccelerationStructureMemorySize(VkAccelerationStructureNV accel);
+
         VkResult                    createFence(const VkFenceCreateInfo& info, VkFence* pFence);
         void                        destroyFence(VkFence fence);
 
@@ -234,23 +309,27 @@ namespace vulkan {
 
         bool                        querySurfaceInfo(VkSurfaceKHR surface, SurfaceInfo& info);
 
+		int							getQueueFamilyIndex(QueueProps& queueProps, VkQueueFlags queueFlag);
+
 	private:
         void                        createDevice();
-        void                        postCreateDevice();
-        void                        initAllocator();
-        void                        destroyAllocator();
+		void						loadDeviceFunctions();
 
         VkPhysicalDevice            physical_device_    = VK_NULL_HANDLE;
 		VkDevice					device_             = VK_NULL_HANDLE;
+
+		QueuesInfo					queues_info_		= {};
 
         ngfx::DeviceType            device_type_        = ngfx::DeviceType::Integrate;
         bool                        is_mobile_gpu_      = false;
         bool                        support_raytracing_ = false;
         RtProps                     ray_tracing_props_  = {};
+		GpuAllocator				mem_alloc_;
 
-        VmaAllocator                memory_allocator_;
+		iptr<GpuFactory>            factory_;
 
-        iptr<GpuFactory>            factory_;
+	private: // device procs table
+#include "device_procs.inl"
 	};
 
     class GpuSwapchain : public ngfx::Swapchain {
@@ -372,29 +451,53 @@ namespace vulkan {
     class GpuBuffer : public ngfx::Buffer
     {
     public:
-        GpuBuffer(const ngfx::BufferDesc& desc, GpuDevice* device);
+        GpuBuffer(const ngfx::BufferDesc& desc, VkBuffer buffer, GpuAllocator::MemoryItem inMemItem, GpuDevice* device);
         ~GpuBuffer() override;
         ngfx::BufferView*           newView(ngfx::Result * result) override;
         bool                        isValid() const { return buffer_ != VK_NULL_HANDLE; }
+		// ~ resource interface
+		void*						map(ngfx::uint64 offset, ngfx::uint64 size) override;
+		void						unmap(void * addr) override;
+		// ~ end resource interface
+
+		// ~ gfx object interface
+		void						setLabel(const char* label) override;
+		const char*					label() const override;
+		// ~ end gfx object interface
     private:
         VkBuffer                    buffer_ = VK_NULL_HANDLE;
         VkBufferCreateInfo          create_info_;
         ngfx::BufferDesc            desc_;
+		GpuAllocator::MemoryItem	mem_item_ = {};
+		//<list of resource views implicit & explicit>
         iptr<GpuDevice>             device_;
     };
 
     class GpuTexture : public ngfx::Texture
     {
     public:
-        GpuTexture(const ngfx::TextureDesc& desc, GpuDevice* device);
+        GpuTexture(const ngfx::TextureDesc& desc, VkImage image, GpuAllocator::MemoryItem inMemItem, GpuDevice* device);
         ~GpuTexture() override;
+
+		ngfx::PixelFormat			format() const override;
         ngfx::TextureView*          newView(ngfx::Result * result) override;
         bool                        isValid() const { return texture_ != VK_NULL_HANDLE; }
+
+		// ~ resource interface
+		void*						map(ngfx::uint64 offset, ngfx::uint64 size) override;
+		void						unmap(void * addr) override;
+		// ~ end resource interface
+
+		// ~ gfx object interface
+		void						setLabel(const char* label) override;
+		const char*					label() const override;
+		// ~ end gfx object interface
 
     private:
         VkImage                     texture_        = VK_NULL_HANDLE;
         VkImageCreateInfo           create_info_    = {};
         ngfx::TextureDesc           desc_           = {};
+		GpuAllocator::MemoryItem	mem_item_		= {};
         iptr<GpuDevice>             device_;
     };
 
@@ -417,7 +520,11 @@ namespace vulkan {
     {
         using CreateInfo = VkAccelerationStructureCreateInfoNV;
     public:
-        GpuRaytracingAccelerationStructure(const ngfx::RaytracingASDesc& desc, GpuDevice* device);
+        GpuRaytracingAccelerationStructure(
+			const ngfx::RaytracingASDesc& desc,
+			VkAccelerationStructureNV inAs, 
+			GpuAllocator::MemoryItem const& memItem,
+			GpuDevice* device);
         ~GpuRaytracingAccelerationStructure() override;
 
         bool                        isValid() const { return acceleration_structure_ != VK_NULL_HANDLE; }
@@ -426,12 +533,16 @@ namespace vulkan {
 
     private:
         VkAccelerationStructureNV   acceleration_structure_ = VK_NULL_HANDLE;
-        VkDeviceMemory              memory_                 = VK_NULL_HANDLE;
+		GpuAllocator::MemoryItem	mem_item_				= {};
         ngfx::RaytracingASDesc      desc_                   = {};
         CreateInfo                  create_info_            = {};
         iptr<GpuDevice>             device_;
     };
 }
+
+#include "vk_instance.inl"
+#include "vk_device.inl"
+
 extern "C" 
 {
     NGFX_EXPORT ngfx::Factory* CreateFactory(bool debug_layer_enable, ngfx_LogCallback log_call);

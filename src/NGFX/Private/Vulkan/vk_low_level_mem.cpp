@@ -1,7 +1,5 @@
 #include "vk_common.h"
 
-#include "vk_mem_alloc.h"
-
 namespace vulkan {
     Allocator               gAllocator;
     VkAllocationCallbacks   gAllocationCallbacks = {
@@ -13,6 +11,7 @@ namespace vulkan {
         &Allocator::notifyAlloc,
         &Allocator::notifyFree,
     };
+
 
     void * Allocator::alloc(void* usr, size_t size, size_t align, VkSystemAllocationScope scope)
     {
@@ -75,7 +74,8 @@ namespace vulkan {
     {
     }
 
-    GpuAllocator::GpuAllocator(GpuDevice * device)
+    GpuAllocator::GpuAllocator(GpuDevice* device)
+		: device_(device)
     {
     }
 
@@ -83,21 +83,107 @@ namespace vulkan {
     {
     }
 
-    void GpuDevice::initAllocator()
-    {
-        VmaAllocatorCreateInfo info = {
-            physical_device_,
-            device_,
-            0,
-            0,
-            &gAllocationCallbacks
-        };
-        vmaCreateAllocator(&info, &memory_allocator_);
-    }
+	int GpuAllocator::getMemoryTypeIndex(int typeBits, VkMemoryPropertyFlags properties, bool& memTypeFound)
+	{
+		for (uint32_t i = 0; i < device_mem_props_.memoryTypeCount; i++)
+		{
+			if ((typeBits & 1) == 1)
+			{
+				if ((device_mem_props_.memoryTypes[i].propertyFlags & properties) == properties)
+				{
+					memTypeFound = true;
+					return i;
+				}
+			}
+			typeBits >>= 1;
+		}
+		memTypeFound = false;
+		return 0;
+	}
 
-    void GpuDevice::destroyAllocator()
-    {
-        vmaDestroyAllocator(memory_allocator_);
-        memory_allocator_ = nullptr;
-    }
+	ngfx::Result GpuAllocator::allocateForBuffer(VkBuffer buffer, ngfx::StorageMode mode, MemoryItem& memItem)
+	{
+		VkMemoryRequirements memReq = {};
+		device_->getBufferMemoryRequirements(buffer, &memReq);
+		memReq.alignment;
+		bool found = false;
+		VkExportMemoryAllocateInfoNV Info;
+		VkMemoryAllocateInfo alloc_info = {
+			VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, nullptr,
+			memReq.size,
+			getMemoryTypeIndex(
+				memReq.memoryTypeBits, 
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, found)
+		};
+		VkDeviceMemory memory = VK_NULL_HANDLE;
+		device_->allocateMemory(&alloc_info, &memory);
+		memItem.mem = memory;
+		memItem.offset = 0u;
+
+		return ngfx::Result::Ok;
+	}
+
+	ngfx::Result GpuAllocator::allocateForImage(VkImage image, ngfx::StorageMode mode, MemoryItem& memItem)
+	{
+		VkMemoryRequirements memReq = {};
+		device_->getImageMemoryRequirements(image, &memReq);
+		memReq.alignment;
+		bool found = false;
+		VkMemoryAllocateInfo alloc_info = {
+			VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, nullptr,
+			memReq.size,
+			getMemoryTypeIndex(
+				memReq.memoryTypeBits,
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, found)
+		};
+		VkDeviceMemory memory = VK_NULL_HANDLE;
+		device_->allocateMemory(&alloc_info, &memory);
+		memItem.mem = memory;
+		memItem.offset = 0u;
+
+		return ngfx::Result::Ok;
+	}
+
+	ngfx::Result GpuAllocator::allocateForAccelerationStructure(VkAccelerationStructureNV accelerationStructure, ngfx::StorageMode mode, MemoryItem& memItem)
+	{
+		VkMemoryRequirements2 memoryRequirements2{};
+		device_->getAccelerationStructureMemoryRequirements(accelerationStructure, 
+			VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_NV, 
+			&memoryRequirements2);
+		memoryRequirements2.memoryRequirements.alignment;
+		bool found = false;
+		VkMemoryAllocateInfo alloc_info = {
+			VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, nullptr,
+			memoryRequirements2.memoryRequirements.size,
+			getMemoryTypeIndex(
+				memoryRequirements2.memoryRequirements.memoryTypeBits,
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, found)
+		};
+		VkDeviceMemory memory = VK_NULL_HANDLE;
+		device_->allocateMemory(&alloc_info, &memory);
+		memItem.mem = memory;
+		memItem.offset = 0u;
+
+		return ngfx::Result::Ok;
+	}
+
+	void GpuAllocator::freeBuffer(VkBuffer buffer, MemoryItem const& item)
+	{
+		device_->freeMemory(item.mem);
+	}
+
+	void GpuAllocator::freeImage(VkImage image, MemoryItem const& item)
+	{
+		device_->freeMemory(item.mem);
+	}
+
+	void GpuAllocator::freeAccelerationStructure(VkAccelerationStructureNV accelerationStructure, MemoryItem const& item)
+	{
+		device_->freeMemory(item.mem);
+	}
+
+	void GpuAllocator::init()
+	{
+		device_->getPhysicalDeviceMemoryProperties(device_mem_props_);
+	}
 }

@@ -1,5 +1,10 @@
 #include "vk_common.h"
-
+/*
+ Buffer views and texture views are created when encoding commands.
+ When binding to fix slot,
+ create the right resource view for slot, 
+ then insert cooresponding resource barrier in need.
+ */
 namespace vulkan {
     GpuCommandBuffer::GpuCommandBuffer(GpuQueue * queue)
     {
