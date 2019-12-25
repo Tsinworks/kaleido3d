@@ -1,63 +1,77 @@
 #pragma once
 #include "ngfx.h"
+
+#ifdef BUILD_SHARED_LIB
+#define NGFXU_API __declspec(dllexport)
+#else
+#define NGFXU_API __declspec(dllimport)
+#endif
+
 namespace ngfxu
 {
     template <typename T>
-    class Handle {
+    class NGFXU_API Handle {
     public:
         using Super = Handle<T>;
 
         Handle(T* obj) : ptr_(obj) {}
 
         Handle<T>& operator=(Handle<T> const& other) {
-            ptr_.swap(other);
-            return this;
+            ptr_ = (other.ptr_);
+            return *this;
         }
 
     protected:
         ngfx::Ptr<T> ptr_;
     };
 
-	class Fence : public Handle<ngfx::Fence>
+	class NGFXU_API Fence : public Handle<ngfx::Fence>
 	{
 	public:
-
+		Fence(ngfx::Fence* fence) : Super(fence) {}
 	};
 
-	class Drawable : public Handle<ngfx::Swapchain>
+	class NGFXU_API Drawable : public Handle<ngfx::Swapchain>
 	{
 	public:
-
+		Drawable(ngfx::Swapchain* swapChain) : Super(swapChain) {}
 	};
 
-	class RenderCommandEncoder : public Handle<ngfx::RenderEncoder>
+	class NGFXU_API RenderCommandEncoder : public Handle<ngfx::RenderEncoder>
 	{
 	public:
+		RenderCommandEncoder(ngfx::RenderEncoder* renderEncoder) : Super(renderEncoder) {}
+
 		void updateFence(Fence fence);
 		void waitForFence(Fence fence);
 		void presentDrawable(Drawable const& drawable);
 		void endEncode();
 	};
 
-	class ParallelRenderEncoder : public Handle<ngfx::ParallelEncoder>
+	class NGFXU_API ParallelRenderEncoder : public Handle<ngfx::ParallelEncoder>
 	{
 	public:
-		RenderCommandEncoder subEncoder();
+		ParallelRenderEncoder(ngfx::ParallelEncoder* parallelEncoder) : Super(parallelEncoder) {}
 
+		RenderCommandEncoder subEncoder();
 		void endEncode();
 	};
 
-	class ComputeEncoder : public Handle<ngfx::ComputeEncoder>
+	class NGFXU_API ComputeEncoder : public Handle<ngfx::ComputeEncoder>
 	{
 	public:
+		ComputeEncoder(ngfx::ComputeEncoder* computeEncoder) : Super(computeEncoder) {}
+
 		void updateFence(Fence fence);
 		void waitForFence(Fence fence);
 		void dispatch(int x, int y, int z);
 		void endEncode();
 	};
 
-	class CommandBuffer : public Handle<ngfx::CommandBuffer> {
+	class NGFXU_API CommandBuffer : public Handle<ngfx::CommandBuffer> {
 	public:
+		CommandBuffer(ngfx::CommandBuffer* cmdBuf) : Super(cmdBuf) {}
+
 		RenderCommandEncoder newRenderEncoder(ngfx::RenderpassDesc const& rpDesc);
 		ParallelRenderEncoder newParallelRenderEncoder(ngfx::RenderpassDesc const& rpDesc);
 		ComputeEncoder newComputeEncoder();
@@ -65,24 +79,24 @@ namespace ngfxu
 		void release();
 	};
 
-    class CommandQueue : public Handle<ngfx::CommandQueue> {
+    class NGFXU_API CommandQueue : public Handle<ngfx::CommandQueue> {
     public:
         CommandQueue(ngfx::CommandQueue* queue) : Super(queue) {}
 		CommandBuffer obtainCommandBuffer();
     };
 
-    class RaytracingAccelerationStructure : public Handle<ngfx::RaytracingAS>
+    class NGFXU_API RaytracingAccelerationStructure : public Handle<ngfx::RaytracingAS>
     {
     public:
         RaytracingAccelerationStructure(ngfx::RaytracingAS* as) : Super(as) {}
     };
 
-    class Buffer : public Handle<ngfx::Buffer> {
+    class NGFXU_API Buffer : public Handle<ngfx::Buffer> {
     public:
         Buffer(ngfx::Buffer* buffer) : Super(buffer) {}
     };
 
-    class Device : public Handle<ngfx::Device> {
+    class NGFXU_API Device : public Handle<ngfx::Device> {
     public:
         Device(ngfx::Device* device) : Super(device) {}
         CommandQueue newQueue() {
@@ -101,7 +115,7 @@ namespace ngfxu
 		void wait();
     };
 
-    class Factory : public Handle<ngfx::Factory> {
+    class NGFXU_API Factory : public Handle<ngfx::Factory> {
     public:
         Factory(ngfx::Factory* factory) : Super(factory) {
 			factory->init();

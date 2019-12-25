@@ -1,5 +1,4 @@
 set (NGFX_SRCS
-Private/ngfx_shell.cpp
 Private/Vulkan/vk_commands.cpp
 Private/Vulkan/vk_log.cpp
 Private/Vulkan/vk_low_level_mem.cpp
@@ -22,7 +21,12 @@ source_group(NGFX FILES ${NGFX_SRCS})
 
 k3d_add_lib(NGFX SRCS ${NGFX_SRCS} LIBS Kaleido3D.Core FOLDER "Runtime" INCLUDES Public ../Core)
 
+set(NGFX_SHELL_SRCS
+Public/ngfx_shell.h
+Private/ngfx_shell.cpp)
+source_group(sh FILES ${NGFX_SHELL_SRCS})
+k3d_add_lib(NGFXSHELL SRCS ${NGFX_SHELL_SRCS} LIBS Kaleido3D.Core FOLDER "Runtime" INCLUDES Public ../Core)
 
-add_executable(NGFXTest Test/vk_ngfx.cpp)
-target_include_directories(NGFXTest PRIVATE Public . ../Core)
-target_link_libraries(NGFXTest Kaleido3D.Core)
+include(${CMAKE_CURRENT_SOURCE_DIR}/CMake/AddNGFXTest.cmake)
+
+add_subdirectory(Test)

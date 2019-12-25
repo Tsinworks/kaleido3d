@@ -1,4 +1,4 @@
-#include "Public/ngfx_shell.h"
+#include "ngfx_shell.h"
 #include "CoreMinimal.h"
 
 static void log_print(int level, const char* msg)

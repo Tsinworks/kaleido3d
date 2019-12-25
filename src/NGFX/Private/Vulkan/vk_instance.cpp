@@ -97,6 +97,9 @@ namespace vulkan
 
 	GpuFactory::~GpuFactory()
 	{
+		// destroy devices firstly
+		devices_.clear();
+
 		if (instance_ != VK_NULL_HANDLE)
 		{
 			__DestroyInstance(instance_, NGFXVK_ALLOCATOR);
