@@ -19,6 +19,8 @@ VK_PROTO_FN(GetBufferMemoryRequirements);
 
 VK_PROTO_FN(CreateFence);
 VK_PROTO_FN(DestroyFence);
+VK_PROTO_FN(CreateSemaphore);
+VK_PROTO_FN(DestroySemaphore);
 
 // ~ nv raytracing
 VK_PROTO_FN(CreateAccelerationStructureNV);
@@ -47,3 +49,17 @@ VK_PROTO_FN(CmdBeginDebugUtilsLabelEXT);
 VK_PROTO_FN(CmdInsertDebugUtilsLabelEXT);
 VK_PROTO_FN(CmdEndDebugUtilsLabelEXT);
 // ~ end debug util
+
+VK_PROTO_FN(CreateSwapchainKHR);
+VK_PROTO_FN(AcquireNextImageKHR);
+VK_PROTO_FN(QueuePresentKHR);
+VK_PROTO_FN(GetSwapchainImagesKHR);
+VK_PROTO_FN(DestroySwapchainKHR);
+
+VK_PROTO_FN(AllocateCommandBuffers);
+VK_PROTO_FN(ResetCommandBuffer);
+VK_PROTO_FN(FreeCommandBuffers);
+
+VK_PROTO_FN(CreateCommandPool);
+VK_PROTO_FN(ResetCommandPool);
+VK_PROTO_FN(DestroyCommandPool);

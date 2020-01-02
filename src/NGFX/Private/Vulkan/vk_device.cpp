@@ -6,7 +6,6 @@
 #include "vk_common.h"
 #include <unordered_map>
 
-
 #define VULKAN_STANDARD_LAYER "VK_LAYER_LUNARG_standard_validation"
 
 namespace vulkan {
@@ -61,6 +60,12 @@ namespace vulkan {
 		VK_PROTO_FN_ZERO(CmdInsertDebugUtilsLabelEXT);
 		VK_PROTO_FN_ZERO(CmdEndDebugUtilsLabelEXT);
 		// ~ end debug util
+
+		VK_PROTO_FN_ZERO(CreateSwapchainKHR);
+		VK_PROTO_FN_ZERO(AcquireNextImageKHR);
+		VK_PROTO_FN_ZERO(QueuePresentKHR);
+		VK_PROTO_FN_ZERO(GetSwapchainImagesKHR);
+		VK_PROTO_FN_ZERO(DestroySwapchainKHR);
 	}
 
 	GpuDevice::~GpuDevice()
@@ -109,6 +114,8 @@ namespace vulkan {
 		queues_info_.compute.queueFamilyIndex = getQueueFamilyIndex(queueProps, VK_QUEUE_COMPUTE_BIT);
 		queues_info_.transfer.queueFamilyIndex = getQueueFamilyIndex(queueProps, VK_QUEUE_TRANSFER_BIT);
 
+		queues_info_.presentQueueFamilyIndex = queues_info_.graphics.queueFamilyIndex;
+
 		ngfx::Vec<VkDeviceQueueCreateInfo> queue_infos;
 		float priority = 0.0f;
 		VkDeviceQueueCreateInfo queue_info = { VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
@@ -133,13 +140,36 @@ namespace vulkan {
 			if (extensions.hasExtension(VK_EXT_DEBUG_MARKER_EXTENSION_NAME)) {
 				required_extensions.push(VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
 			}
+			if (extensions.hasExtension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME)) {
+				required_extensions.push(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+			}
+			if (extensions.hasExtension(VK_EXT_DEBUG_REPORT_EXTENSION_NAME)) {
+				required_extensions.push(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+			}
 			requiredLayers.push(VULKAN_STANDARD_LAYER);
 		}
+
+		if (extensions.hasExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME)) {
+			required_extensions.push(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+		}
+		if (extensions.hasExtension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME)) {
+			required_extensions.push(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
+		}
+		if (extensions.hasExtension(VK_KHR_WIN32_SURFACE_EXTENSION_NAME)) {
+			required_extensions.push(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+		}
+		if (extensions.hasExtension(VK_EXT_HDR_METADATA_EXTENSION_NAME)) {
+			required_extensions.push(VK_EXT_HDR_METADATA_EXTENSION_NAME);
+		}
+		if (extensions.hasExtension(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME)) {
+			required_extensions.push(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME);
+		}
+
 		VkDeviceCreateInfo device_info = {
 			VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, nullptr, 0,
-			queue_infos.num(), &queue_infos[0],// queueCreateInfoCount queueCreateInfo
-			requiredLayers.num(), &requiredLayers[0],// layerCount, layer
-			required_extensions.num(), &required_extensions[0],// extensionCount, extensions
+			(uint32_t)queue_infos.num(), &queue_infos[0],// queueCreateInfoCount queueCreateInfo
+			(uint32_t)requiredLayers.num(), &requiredLayers[0],// layerCount, layer
+			(uint32_t)required_extensions.num(), &required_extensions[0],// extensionCount, extensions
 			&features// features
 		};
 		VkResult result = factory_->__CreateDevice(physical_device_, &device_info, NGFXVK_ALLOCATOR, &device_);
@@ -174,6 +204,21 @@ namespace vulkan {
 		VK_DEVICE_FN_RSV(DestroyBuffer);
 		VK_DEVICE_FN_RSV(CreateFence);
 		VK_DEVICE_FN_RSV(DestroyFence);
+		VK_DEVICE_FN_RSV(CreateSemaphore);
+		VK_DEVICE_FN_RSV(DestroySemaphore);
+
+		VK_DEVICE_FN_RSV(CreateSwapchainKHR);
+		VK_DEVICE_FN_RSV(AcquireNextImageKHR);
+		VK_DEVICE_FN_RSV(QueuePresentKHR);
+		VK_DEVICE_FN_RSV(GetSwapchainImagesKHR);
+		VK_DEVICE_FN_RSV(DestroySwapchainKHR);
+
+		VK_DEVICE_FN_RSV(AllocateCommandBuffers);
+		VK_DEVICE_FN_RSV(ResetCommandBuffer);
+		VK_DEVICE_FN_RSV(FreeCommandBuffers);
+		VK_DEVICE_FN_RSV(CreateCommandPool);
+		VK_DEVICE_FN_RSV(ResetCommandPool);
+		VK_DEVICE_FN_RSV(DestroyCommandPool);
 
 		// ~ nv raytracing
 		if (support_raytracing_)
@@ -338,6 +383,8 @@ namespace vulkan {
 
     ngfx::CommandBuffer* GpuQueue::newCommandBuffer()
     {
+
+
         return nullptr;
     }
 

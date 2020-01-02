@@ -18,3 +18,21 @@ VK_PROTO_FN(GetPhysicalDeviceMemoryProperties2);
 VK_PROTO_FN(CreateDevice);
 VK_PROTO_FN(DestroyDevice);
 VK_PROTO_FN(GetDeviceProcAddr);
+
+#if defined(VK_KHR_win32_surface)
+VK_PROTO_FN(CreateWin32SurfaceKHR);
+VK_PROTO_FN(GetPhysicalDeviceWin32PresentationSupportKHR);
+#endif
+
+VK_PROTO_FN(DestroySurfaceKHR);
+
+VK_PROTO_FN(GetPhysicalDeviceSurfaceSupportKHR);
+VK_PROTO_FN(GetPhysicalDeviceSurfaceCapabilitiesKHR);
+VK_PROTO_FN(GetPhysicalDeviceSurfaceFormatsKHR);
+VK_PROTO_FN(GetPhysicalDeviceSurfacePresentModesKHR);
+
+VK_PROTO_FN(CreateDebugReportCallbackEXT);
+VK_PROTO_FN(DestroyDebugReportCallbackEXT);
+
+// Need HDR support ?
+VK_PROTO_FN(SetHdrMetadataEXT);

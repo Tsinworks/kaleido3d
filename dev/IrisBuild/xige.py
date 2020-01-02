@@ -98,7 +98,7 @@ class InterfaceGenerator(object):
 
     @staticmethod
     def on_error(msg, p_arg):
-        print c_char_p(msg).value
+        print(c_char_p(msg).value)
 
     @staticmethod
     def begin_fn(p_node, c_int, p_arg):

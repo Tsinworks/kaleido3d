@@ -14,12 +14,14 @@ namespace ngfxu
     public:
         using Super = Handle<T>;
 
-        Handle(T* obj) : ptr_(obj) {}
+        Handle(T* obj = nullptr) : ptr_(obj) {}
 
         Handle<T>& operator=(Handle<T> const& other) {
             ptr_ = (other.ptr_);
             return *this;
         }
+
+		T* iptr() { return ptr_.get(); }
 
     protected:
         ngfx::Ptr<T> ptr_;
@@ -31,17 +33,49 @@ namespace ngfxu
 		Fence(ngfx::Fence* fence) : Super(fence) {}
 	};
 
-	class NGFXU_API Drawable : public Handle<ngfx::Swapchain>
+	class NGFXU_API Texture : public Handle<ngfx::Texture>
 	{
 	public:
-		Drawable(ngfx::Swapchain* swapChain) : Super(swapChain) {}
+		Texture(ngfx::Texture* texture) : Super(texture) {}
+
+	};
+
+	class NGFXU_API Drawable : public Handle<ngfx::Drawable>
+	{
+	public:
+		Drawable(ngfx::Drawable* drawable) : Super(drawable) {}
+
+		Texture texture();
+	};
+
+	class NGFXU_API PresentLayer : public Handle<ngfx::PresentLayer>
+	{
+	public:
+		PresentLayer(ngfx::PresentLayer* layer = nullptr) : Super(layer) {}
+
+		Drawable nextDrawable();
+	};
+
+	class NGFXU_API RenderPipeline : public Handle<ngfx::RenderPipeline>
+	{
+	public:
+		RenderPipeline(ngfx::RenderPipeline* pipeline = nullptr) : Super(pipeline) {}
+	};
+
+	class NGFXU_API ComputePipeline : public Handle<ngfx::ComputePipeline>
+	{
+	public:
+		ComputePipeline(ngfx::ComputePipeline* pipeline = nullptr) : Super(pipeline) {}
 	};
 
 	class NGFXU_API RenderCommandEncoder : public Handle<ngfx::RenderEncoder>
 	{
 	public:
 		RenderCommandEncoder(ngfx::RenderEncoder* renderEncoder) : Super(renderEncoder) {}
-
+		void setPipeline(const RenderPipeline& render_pipeline);
+		void setBindGroup();
+		
+		void drawPrimitive();
 		void updateFence(Fence fence);
 		void waitForFence(Fence fence);
 		void presentDrawable(Drawable const& drawable);
@@ -61,7 +95,8 @@ namespace ngfxu
 	{
 	public:
 		ComputeEncoder(ngfx::ComputeEncoder* computeEncoder) : Super(computeEncoder) {}
-
+		void setPipeline(const ComputePipeline& pipeline);
+		void setBindGroup();
 		void updateFence(Fence fence);
 		void waitForFence(Fence fence);
 		void dispatch(int x, int y, int z);
@@ -81,7 +116,7 @@ namespace ngfxu
 
     class NGFXU_API CommandQueue : public Handle<ngfx::CommandQueue> {
     public:
-        CommandQueue(ngfx::CommandQueue* queue) : Super(queue) {}
+        CommandQueue(ngfx::CommandQueue* queue = nullptr) : Super(queue) {}
 		CommandBuffer obtainCommandBuffer();
     };
 
@@ -98,7 +133,7 @@ namespace ngfxu
 
     class NGFXU_API Device : public Handle<ngfx::Device> {
     public:
-        Device(ngfx::Device* device) : Super(device) {}
+        Device(ngfx::Device* device = nullptr) : Super(device) {}
         CommandQueue newQueue() {
             ngfx::Result result;
             return CommandQueue(ptr_->newQueue(&result));
@@ -107,21 +142,32 @@ namespace ngfxu
             ngfx::Result result;
             return ptr_->newBuffer(&desc, mode, &result);
         }
+
+		RenderPipeline newRenderPipeline(const ngfx::RenderPipelineDesc& desc);
+		ComputePipeline newComputePipeline(const ngfx::ComputePipelineDesc& desc);
+
         RaytracingAccelerationStructure newRaytracingAccelerationStructure(const ngfx::RaytracingASDesc& desc) {
             ngfx::Result result;
             return RaytracingAccelerationStructure(ptr_->newRaytracingAS(&desc, &result));
         }
 		Fence newFence();
+
+		void compileShaderSource();
+		void compileShaderLibrary();
+
 		void wait();
     };
 
     class NGFXU_API Factory : public Handle<ngfx::Factory> {
     public:
         Factory(ngfx::Factory* factory) : Super(factory) {
-			factory->init();
 		}
         Device getDevice(uint32_t id) { return Device(ptr_->getDevice(id)); }
 
+		PresentLayer newPresentLayer(ngfx::PresentLayerDesc const& desc, Device device);
+
 		Drawable getDrawable();
     };
+
+	ngfx::RenderpassDesc CreateRenderpassDesc();
 }

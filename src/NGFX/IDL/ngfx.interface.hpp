@@ -81,16 +81,32 @@ namespace ngfx {
     interface Framebuffer : LabeledObject {
 
     };
-	[[vk("VkSwapchain"),refcount("true")]]
-    interface Swapchain {
-		Texture*			currentTexture();
-    };
+
+	interface Drawable;
+
+	[[vk("VkSwapchain"), refcount("true")]]
+	interface PresentLayer
+	{
+		void				getDesc(PresentLayerDesc* desc) const;
+		Device*				device();
+		Drawable*			nextDrawable();
+	};
+
+	[[vk("VkSwapchain"), refcount("true")]]
+	interface Drawable
+	{
+		int					drawableId() const;
+		Texture*			texture();
+		PresentLayer*		layer();
+		void				present();
+	};
+
 	[[transient("frame"), refcount("true")]]
 	interface BindGroup {
 		void				setSampler(uint32 id, ShaderStage stage, const Sampler* sampler);
-		void				setSamplers(uint32 id, ShaderStage stage, const array<Texture*>* sampler);
+		/* void				setSamplers(uint32 id, ShaderStage stage, const array<Texture*>* sampler); */
 		void				setTexture(uint32 id, ShaderStage stage, const TextureView* texture);
-		void				setTextures(uint32 id, ShaderStage stage, const array<Texture*>* texture);
+		/* void				setTextures(uint32 id, ShaderStage stage, const array<Texture*>* texture); */
 		void				setBuffer(uint32 id, ShaderStage stage, const BufferView* buffer);
 		void				setRaytracingAS(uint32 id, ShaderStage stage, const RaytracingAS* as);
 	};
@@ -147,7 +163,7 @@ namespace ngfx {
 								int vertexStart, int vertexCount, int instanceCount, int baseInstance);
 		void				drawIndirect(PrimitiveType primType, 
 								const Buffer* buffer, uint64 offset, uint32 drawCount, uint32 stride);
-        void				present(Swapchain* swapchain);
+        void				present(Drawable* drawable);
     };
     interface ComputeEncoder : CommandEncoder {
         void				dispatch(int x, int y, int z);
@@ -218,13 +234,14 @@ namespace ngfx {
 		RaytracingAS*		newRaytracingAS(const RaytracingASDesc* rtDesc, Result* result)[[gen_rc("true")]];
 		Sampler*			newSampler(const SamplerDesc* desc, Result* result)[[gen_rc("true")]];
         Fence*				newFence(Result* result);
-        Swapchain*          newSwapchain(const SwapchainDesc* desc, const Swapchain* old, void* surface, Result* result);
         Result				wait();
     };
     [[refcount("true")]]
     interface Factory {
         int                 numDevices();
         Device*             getDevice(uint32 id);
-        void*               newSurface(void* handle);
+		PresentLayer*		newPresentLayer(const PresentLayerDesc* desc, 
+                                Device* device, PresentLayer* old, 
+                                Result* result);
     };
 }

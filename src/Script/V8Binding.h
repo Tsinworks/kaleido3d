@@ -1,8 +1,8 @@
 #pragma once
-#include <Core/Module.h>
-#include <unordered_map>
+#include "CoreMinimal.h"
 #include "v8.h"
 #include "libplatform/libplatform.h"
+#include <unordered_map>
 
 namespace v8
 {

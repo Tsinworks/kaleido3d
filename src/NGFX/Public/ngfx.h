@@ -1,9 +1,9 @@
 #ifndef __ngfx_h__
 #define __ngfx_h__
-#include <ngfx_atomic.h>
-#include <ngfx_ptr.h>
-#include <ngfx_allocator.h>
-#include <ngfx_container.h>
+#include "ngfx_atomic.h"
+#include "ngfx_ptr.h"
+#include "ngfx_allocator.h"
+#include "ngfx_container.h"
 namespace ngfx {
 enum class Result : uint8_t {
   Ok,
@@ -208,9 +208,9 @@ enum class ResourceState : uint8_t {
 };
 enum class StorageMode : uint8_t {
   Auto,
-  OnGpu,
-  OnCpu,
+  Private,
   Shared,
+  Dedicated,
 };
 enum class TextureDim : uint8_t {
   Tex1D,
@@ -336,6 +336,20 @@ struct RenderTargetBlendState {
 struct BlendState {
   Vec<RenderTargetBlendState> renderTargets;
 };
+struct Rect {
+  uint32 x;
+  uint32 y;
+  uint32 width;
+  uint32 height;
+};
+struct Viewport {
+  float x;
+  float y;
+  float width;
+  float height;
+  float near;
+  float far;
+};
 struct VertexLayout {
   VertexInputRate inputRate;
   uint32 stride;
@@ -389,13 +403,15 @@ struct SamplerDesc {
   float minLod;
   float maxLod;
 };
-struct SwapchainDesc {
+struct PresentLayerDesc {
   PixelFormat format;
   uint32 width;
   uint32 height;
   ColorSpace colorSpace;
   bool hdrDisplay;
   uint32 maxImages;
+  void* winHandle;
+  void* extraData;
 };
 struct Device;
 struct LabeledObject : public Rc {
@@ -462,8 +478,17 @@ struct Shader : public LabeledObject {
 };
 struct Framebuffer : public LabeledObject {
 };
-struct Swapchain : public Rc {
-  virtual Texture * currentTexture() = 0;
+struct Drawable;
+struct PresentLayer : public Rc {
+  virtual void getDesc(PresentLayerDesc * desc) const = 0;
+  virtual Device * device() = 0;
+  virtual Drawable * nextDrawable() = 0;
+};
+struct Drawable : public Rc {
+  virtual int drawableId() const = 0;
+  virtual Texture * texture() = 0;
+  virtual PresentLayer * layer() = 0;
+  virtual void present() = 0;
 };
 struct BindGroup : public Rc {
   virtual void setSampler(uint32 id, ShaderStage stage, const Sampler * sampler) = 0;
@@ -506,11 +531,15 @@ struct CommandEncoder : public LabeledObject {
   virtual void endEncode() = 0;
 };
 struct RenderEncoder : public CommandEncoder {
-  virtual void setViewport() = 0;
-  virtual void setScissors() = 0;
-  virtual void drawPrimitives() = 0;
-  virtual void drawIndexedPrimitives() = 0;
-  virtual void present(Swapchain * swapchain) = 0;
+  virtual void setViewport(Viewport viewport) = 0;
+  virtual void setViewports(int numViewports, const Viewport * pViewport) = 0;
+  virtual void setScissors(int numScirssors, const Rect * pRects) = 0;
+  virtual void setStencilRef() = 0;
+  virtual void setDepthBias() = 0;
+  virtual void drawPrimitives(PrimitiveType primType, int vertexStart, int vertexCount, int instanceCount, int baseInstance) = 0;
+  virtual void drawIndexedPrimitives(PrimitiveType primType, IndexType indexType, int indexCount, const Buffer * indexBuffer, int indexBufferOffset, int vertexStart, int vertexCount, int instanceCount, int baseInstance) = 0;
+  virtual void drawIndirect(PrimitiveType primType, const Buffer * buffer, uint64 offset, uint32 drawCount, uint32 stride) = 0;
+  virtual void present(Drawable * drawable) = 0;
 };
 struct ComputeEncoder : public CommandEncoder {
   virtual void dispatch(int x, int y, int z) = 0;
@@ -570,14 +599,12 @@ struct Device : public LabeledObject {
   virtual RaytracingAS * newRaytracingAS(const RaytracingASDesc * rtDesc, Result * result) = 0;
   virtual Sampler * newSampler(const SamplerDesc * desc, Result * result) = 0;
   virtual Fence * newFence(Result * result) = 0;
-  virtual Swapchain * newSwapchain(const SwapchainDesc * desc, const Swapchain * old, void * surface, Result * result) = 0;
   virtual Result wait() = 0;
 };
 struct Factory : public Rc {
-	virtual void init() = 0;
   virtual int numDevices() = 0;
   virtual Device * getDevice(uint32 id) = 0;
-  virtual void * newSurface(void * handle) = 0;
+  virtual PresentLayer * newPresentLayer(const PresentLayerDesc * desc, Device * device, PresentLayer * old, Result * result) = 0;
 };
 }
 

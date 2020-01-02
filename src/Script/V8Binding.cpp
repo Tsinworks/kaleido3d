@@ -1,17 +1,17 @@
-#include <Core/Kaleido3D.h>
 #include "V8Binding.h"
-#include <Core/LogUtil.h>
-#include <Core/AssetManager.h>
-#include <NGFX/src/ngfx.h>
+#include "../NGFX/Public/ngfx.h"
 
 using namespace k3d;
 using namespace ngfx;
 
 namespace v8
 {
+	Global<ObjectTemplate> gAppTempl;
+
     Global<ObjectTemplate> gCommandQueueTempl;
     Global<ObjectTemplate> gDeviceTempl;
     Global<ObjectTemplate> gFactoryTempl;
+
 
     static void vk_commandQueue_commandBuffer(const FunctionCallbackInfo<v8::Value>& args)
     {
@@ -22,9 +22,10 @@ namespace v8
     {
         Local<External> device = Local<External>::Cast(args.Holder()->GetInternalField(0));
         Device* ptr = (Device*)device->Value();
-        DeviceDesc desc = {};
-        ptr->GetDesc(&desc);
-        args.GetReturnValue().Set(String::NewFromUtf8(args.GetIsolate(), desc.vendorName));
+        //DeviceDesc desc = {};
+	
+        //ptr->GetDesc(&desc);
+        //args.GetReturnValue().Set(String::NewFromUtf8(args.GetIsolate(), desc.vendorName));
     }
 
     static void vk_device_createPipelineLayout(const FunctionCallbackInfo<v8::Value>& args)
@@ -36,18 +37,18 @@ namespace v8
         Local<External> device = Local<External>::Cast(args.Holder()->GetInternalField(0));
         Device* ptr = (Device*)device->Value();
         CommandQueue* pCmdQueue = nullptr;
-        ptr->CreateCommandQueue(CommandQueueType::Copy, &pCmdQueue);
+        //ptr->CreateCommandQueue(CommandQueueType::Copy, &pCmdQueue);
 
         if (gCommandQueueTempl.IsEmpty())
         {
             Local<ObjectTemplate> cmdQueueTempl = ObjectTemplate::New(args.GetIsolate());
             cmdQueueTempl->SetInternalFieldCount(1);
-            cmdQueueTempl->Set(String::NewFromUtf8(args.GetIsolate(), "commandBuffer"),
+            cmdQueueTempl->Set(String::NewFromUtf8(args.GetIsolate(), "commandBuffer").ToLocalChecked(),
                 FunctionTemplate::New(args.GetIsolate(), vk_commandQueue_commandBuffer));
             gCommandQueueTempl.Reset(args.GetIsolate(), cmdQueueTempl);
         }
         Local<ObjectTemplate> cmdQueueTempl = Local<ObjectTemplate>::New(args.GetIsolate(), gCommandQueueTempl);
-        Local<Object> cmdQueue = cmdQueueTempl->NewInstance();
+        Local<Object> cmdQueue = cmdQueueTempl->NewInstance().ToLocalChecked();
         Local<External> cmdQueuePtr = External::New(args.GetIsolate(), pCmdQueue);
         cmdQueue->SetInternalField(0, cmdQueuePtr);
         args.GetReturnValue().Set(cmdQueue);
@@ -58,7 +59,7 @@ namespace v8
         Local<External> factory = Local<External>::Cast(args.Holder()->GetInternalField(0));
         Factory* ptr = (Factory*)factory->Value();
 
-        SwapChainDesc swapchainDesc = {};
+		PresentLayerDesc swapchainDesc = {};
         auto desc = args[0]->ToObject();
         swapchainDesc.width = desc->Get(String::NewFromUtf8(args.GetIsolate(), "width"))->Uint32Value();
         swapchainDesc.height = desc->Get(String::NewFromUtf8(args.GetIsolate(), "height"))->Uint32Value();
@@ -265,4 +266,4 @@ namespace v8
 
 }
 
-MODULE_IMPLEMENT(V8Script, v8::V8Module)
+//MODULE_IMPLEMENT(V8Script, v8::V8Module)

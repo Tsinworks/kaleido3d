@@ -121,8 +121,8 @@ struct IShaderCompiler : public Rc {
 };
 
 } // namespace ngfx
-extern "C" NGFX_SHADER_COMPILER_API ngfx::Result ngfxCreateGlslangCompiler(ngfx::IShaderCompiler **ppCompiler);
-extern "C" NGFX_SHADER_COMPILER_API ngfx::Result ngfxDestroyGlslangCompiler(ngfx::IShaderCompiler *pCompiler);
+extern "C" NGFX_SHADER_COMPILER_API ngfx::Result ngfxCreateShaderCompiler(ngfx::IShaderCompiler **ppCompiler);
+extern "C" NGFX_SHADER_COMPILER_API ngfx::Result ngfxDestroyShaderCompiler(ngfx::IShaderCompiler *pCompiler);
 #endif
 
 #endif

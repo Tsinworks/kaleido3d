@@ -10,6 +10,26 @@ namespace vulkan
 	{
 		factory_->__GetPhysicalDeviceMemoryProperties(physical_device_, &memProps);
 	}
+
+	inline VkResult GpuDevice::createSwapchain(const VkSwapchainCreateInfoKHR * pCreateInfo, VkSwapchainKHR * pSwapchain)
+	{
+		return __CreateSwapchainKHR(device_, pCreateInfo, NGFXVK_ALLOCATOR, pSwapchain);
+	}
+
+	inline void GpuDevice::destroySwapchain(VkSwapchainKHR swapchain)
+	{
+		__DestroySwapchainKHR(device_, swapchain, NGFXVK_ALLOCATOR);
+	}
+
+	inline VkResult GpuDevice::getSwapchainImages(VkSwapchainKHR swapchain, uint32_t * pSwapchainImageCount, VkImage * pSwapchainImages)
+	{
+		return this->__GetSwapchainImagesKHR(device_, swapchain, pSwapchainImageCount, pSwapchainImages);
+	}
+
+	inline VkResult GpuDevice::acquireNextImage(VkSwapchainKHR swapchain, uint64_t timeOut, VkSemaphore semaphore, VkFence fence, uint32_t * imageIndex)
+	{
+		return __AcquireNextImageKHR(device_, swapchain, timeOut, semaphore, fence, imageIndex);
+	}
 	
 	inline VkResult GpuDevice::allocateMemory(const VkMemoryAllocateInfo* pAllocateInfo, VkDeviceMemory* pMemory)
 	{
@@ -123,5 +143,13 @@ namespace vulkan
 		this->__DestroyFence(device_, fence, NGFXVK_ALLOCATOR);
 	}
 
-	
+	inline VkResult GpuDevice::createSemaphore(const VkSemaphoreCreateInfo& info, VkSemaphore * pSemaphore)
+	{
+		return this->__CreateSemaphore(device_, &info, NGFXVK_ALLOCATOR, pSemaphore);
+	}
+
+	inline void GpuDevice::destroySemaphore(VkSemaphore semaphore)
+	{
+		this->__DestroySemaphore(device_, semaphore, NGFXVK_ALLOCATOR);
+	}
 }

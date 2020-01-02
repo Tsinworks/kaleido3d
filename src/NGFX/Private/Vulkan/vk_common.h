@@ -23,6 +23,11 @@
  */
 #pragma once
 
+#if _WIN32
+#define VK_KHR_win32_surface 1
+#define VK_USE_PLATFORM_WIN32_KHR 1
+#endif
+
 #include <ngfx.h>
 #include "volk.h"
 #define VULKAN_HPP_NO_EXCEPTIONS 1
@@ -52,6 +57,7 @@ namespace vulkan {
 	class GpuDevice;
 	class GpuBuffer;
 	class GpuTexture;
+	class GpuDrawable;
 
 	template <class T>
 	class iptr
@@ -161,6 +167,7 @@ namespace vulkan {
         QueueInfo graphics;
         QueueInfo compute;
         QueueInfo transfer;
+		int32_t presentQueueFamilyIndex;
     };
 
 	class ExtensionProps : public ngfx::Vec<VkExtensionProperties>
@@ -182,7 +189,7 @@ namespace vulkan {
 	public:
         GpuFactory(VkInstance instance, bool enable_debug, ngfx_LogCallback log_call);
         ~GpuFactory() override;
-		void init() override;
+		void initDevices();
 
 		void                        enumerateExtensions();
 
@@ -201,21 +208,45 @@ namespace vulkan {
 
         int                         numDevices() override;
         ngfx::Device *              getDevice(ngfx::uint32 id) override;
-        void*                       newSurface(void* handle) override;
+		ngfx::PresentLayer *		newPresentLayer(const ngfx::PresentLayerDesc* desc, 
+										ngfx::Device* device, ngfx::PresentLayer* old, ngfx::Result* result) override;
         bool                        debuggable() const;
 
+		VkBool32					report(
+										VkDebugReportFlagsEXT                       flags,
+										VkDebugReportObjectTypeEXT                  objectType,
+										uint64_t                                    object,
+										size_t                                      location,
+										int32_t                                     messageCode,
+										const char*                                 pLayerPrefix,
+										const char*                                 pMessage);
 		void						printLogStr(int level, const char* msg);
 	
+		static VkBool32				debugReport(
+										VkDebugReportFlagsEXT                       flags,
+										VkDebugReportObjectTypeEXT                  objectType,
+										uint64_t                                    object,
+										size_t                                      location,
+										int32_t                                     messageCode,
+										const char*                                 pLayerPrefix,
+										const char*                                 pMessage,
+										void*                                       pUserData);
+
 		friend class GpuDevice;
+	public:
+		void destroySurface(VkSurfaceKHR surface);
+
 	private:
 		void enumPhysicalDevices();
 		void loadInstanceFunctions();
+		void resolveInstanceFunctions();
 
 	private:
 		k3d::os::LibraryLoader		soloader_;
 		LayerMap                    layer_props_;
 		ExtensionMap                ext_props_;
 		VkInstance					instance_;
+		VkDebugReportCallbackEXT	debug_report_callback_;
         bool                        debug_enable_;
         ngfx_LogCallback            log_call_;
         ngfx::Vec<iptr<GpuDevice>>  devices_;
@@ -250,7 +281,6 @@ namespace vulkan {
 		ngfx::RaytracingAS *		newRaytracingAS(const ngfx::RaytracingASDesc * rtDesc, ngfx::Result * result) override;
 		ngfx::Sampler *				newSampler(const ngfx::SamplerDesc * desc, ngfx::Result * result) override;
 		ngfx::Fence *				newFence(ngfx::Result * result) override;
-        ngfx::Swapchain *           newSwapchain(const ngfx::SwapchainDesc * desc, const ngfx::Swapchain * old, void * surface, ngfx::Result * result) override;
 		ngfx::Result				wait() override;
 
         bool                        isValid() const { return device_ != VK_NULL_HANDLE; }
@@ -259,9 +289,15 @@ namespace vulkan {
 
         friend class                GpuCommandBuffer;
         friend class                GpuFactory;
+		friend class                GpuPresentLayer;
 
     public:
 		void						getPhysicalDeviceMemoryProperties(VkPhysicalDeviceMemoryProperties& memProps);
+
+		VkResult					createSwapchain(const VkSwapchainCreateInfoKHR* pCreateInfo, VkSwapchainKHR* pSwapchain);
+		void						destroySwapchain(VkSwapchainKHR swapchain);
+		VkResult					getSwapchainImages(VkSwapchainKHR swapchain, uint32_t* pSwapchainImageCount, VkImage* pSwapchainImages);
+		VkResult					acquireNextImage(VkSwapchainKHR swapchain, uint64_t timeOut, VkSemaphore semaphore, VkFence fence, uint32_t* imageIndex);
 
 		VkResult					allocateMemory(const VkMemoryAllocateInfo* pAllocateInfo, VkDeviceMemory* pMemory);
 		void						freeMemory(VkDeviceMemory memory);
@@ -296,13 +332,16 @@ namespace vulkan {
         VkMemoryRequirements        getAccelerationStructureMemorySize(VkAccelerationStructureNV accel);
 
         VkResult                    createFence(const VkFenceCreateInfo& info, VkFence* pFence);
-        void                        destroyFence(VkFence fence);
+		void                        destroyFence(VkFence fence);
+
+		VkResult					createSemaphore(const VkSemaphoreCreateInfo& info, VkSemaphore* pSemaphore);
+		void						destroySemaphore(VkSemaphore semaphore);
 
         struct SurfaceInfo
         {
-            uint32_t present_family_index;
-            uint32_t min_images;
-            uint32_t max_images;
+            uint32_t				present_family_index;
+            uint32_t				min_images;
+            uint32_t				max_images;
             ngfx::Vec<VkPresentModeKHR> present_modes;
             ngfx::Vec<VkSurfaceFormatKHR> formats;
         };
@@ -332,15 +371,36 @@ namespace vulkan {
 #include "device_procs.inl"
 	};
 
-    class GpuSwapchain : public ngfx::Swapchain {
+    class GpuPresentLayer : public ngfx::PresentLayer {
     public:
-        GpuSwapchain(GpuDevice* device);
-        ~GpuSwapchain() override;
+		GpuPresentLayer(GpuDevice* device, VkSurfaceKHR surface, VkSwapchainKHR swapchain);
+        ~GpuPresentLayer() override;
+
+		void						getDesc(ngfx::PresentLayerDesc* desc) const override;
+		ngfx::Device *				device() override;
+		ngfx::Drawable *			nextDrawable() override;
 
     private:
+		VkSurfaceKHR				surface_;
         VkSwapchainKHR              swapchain_;
         iptr<GpuDevice>             device_;
     };
+
+	class GpuDrawable : public ngfx::Drawable
+	{
+	public:
+		GpuDrawable(GpuPresentLayer* layer);
+		~GpuDrawable() override;
+
+		int					drawableId() const override;
+		ngfx::Texture*		texture() override;
+		ngfx::PresentLayer* layer() override;
+		void				present() override;
+
+	private:
+		iptr<GpuPresentLayer> layer_;
+		int image_id_;
+	};
 
     class GpuQueue : public ngfx::CommandQueue
 	{
@@ -380,6 +440,8 @@ namespace vulkan {
         ngfx::RaytraceEncoder *     newRaytraceEncoder(ngfx::Result * result) override;
         ngfx::Result                commit() override;
     private:
+		class CommandEncoder*		encoder_context_;
+
         VkCommandBuffer             command_buffer_;
         iptr<GpuQueue>              queue_;
 	};
@@ -396,16 +458,44 @@ namespace vulkan {
         iptr<GpuCommandBuffer>      command_;
     };
 
-    class ComputeEncoder : public ngfx::ComputeEncoder
+    class ComputeEncoder final : public ngfx::ComputeEncoder
     {
     public:
+		ComputeEncoder(class CommandContext& context);
+		~ComputeEncoder() override;
 
+		void						setPipeline(ngfx::Pipeline* pipeline) override;
+		void						setBindGroup(const ngfx::BindGroup* bindGroup) override;
+		void						dispatch(int thread_group_x, int thread_group_y, int thread_group_z) override;
+		void						endEncode() override;
+
+	private:
+		CommandContext&				context_;
+		iptr<GpuCommandBuffer>      command_;
     };
 
-    class RenderEncoder : public ngfx::RenderEncoder
+    class RenderEncoder final : public ngfx::RenderEncoder
     {
     public:
+		RenderEncoder(CommandContext& context);
+		~RenderEncoder() override;
 
+		void						setPipeline(ngfx::Pipeline* pipeline) override;
+		void						setBindGroup(const ngfx::BindGroup* bindGroup) override;
+
+		void						drawPrimitives(ngfx::PrimitiveType primType, 
+										int vertexStart, int vertexCount, int instanceCount, int baseInstance) override;
+		void						drawIndexedPrimitives(
+										ngfx::PrimitiveType primType, ngfx::IndexType indexType, int indexCount, 
+										const ngfx::Buffer* indexBuffer, int indexBufferOffset,
+										int vertexStart, int vertexCount, int instanceCount, int baseInstance) override;
+		void						drawIndirect(ngfx::PrimitiveType primType, 
+										const ngfx::Buffer* buffer, uint64_t offset, uint32_t drawCount, uint32_t stride) override;
+		void						endEncode() override;
+
+	private:
+		CommandContext&				context_;
+		iptr<GpuCommandBuffer>      command_;
     };
 
     class GpuPipelineBase : public ngfx::Pipeline {
@@ -433,19 +523,25 @@ namespace vulkan {
     class GpuRenderPipeline : public GpuPipelineBase {
         using CreateInfo = VkGraphicsPipelineCreateInfo;
     public:
+		GpuRenderPipeline(GpuDevice* device, ngfx::RenderPipelineDesc const& desc);
+		~GpuRenderPipeline() final override;
 
     private:
         CreateInfo                  create_info_    = {};
         ngfx::RenderPipelineDesc    desc_           = {};
+		bool						lazy_create_	= false;
     };
 
     class GpuComputePipeline : public GpuPipelineBase {
         using CreateInfo = VkComputePipelineCreateInfo;
-    public:
+	public:
+		GpuComputePipeline(GpuDevice* device, ngfx::ComputePipelineDesc const& desc);
+		~GpuComputePipeline() final override;
 
     private:
         CreateInfo                  create_info_    = {};
-        ngfx::ComputePipelineDesc   desc_           = {};
+		ngfx::ComputePipelineDesc   desc_			= {};
+		bool						lazy_create_	= false;
     };
 
     class GpuBuffer : public ngfx::Buffer

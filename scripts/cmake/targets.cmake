@@ -26,5 +26,10 @@ function(k3d_add_lib TARGET)
 		target_compile_definitions(Kaleido3D.${TARGET} PRIVATE BUILD_SHARED_LIB=1)
 	endif()
     target_include_directories(Kaleido3D.${TARGET} PUBLIC ${${TARGET}_INCLUDES})
-    set_target_properties(Kaleido3D.${TARGET} PROPERTIES FOLDER "${${TARGET}_FOLDER}")
+    set_target_properties(Kaleido3D.${TARGET} PROPERTIES 
+		FOLDER "${${TARGET}_FOLDER}"
+		RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/bin"
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/bin"
+		RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/bin"	
+	)
 endfunction()

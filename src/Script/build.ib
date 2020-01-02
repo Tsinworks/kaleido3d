@@ -1,0 +1,16 @@
+cproj("kV8Binding") {
+    type = "shared_lib"
+    srcs = [ 
+        "V8Binding.h",
+        "V8Binding.cpp"
+    ]
+    private = {
+        defines = [ "LIB_BUILD=1", "BUILD_SHARED_LIB=1" ]
+    }
+    inc_dirs = [ "." ]
+
+    on_init = () {
+        url = "https://github.com/Tomicyo/v8_ci/releases/download/v8.2.0/v8_dist_vc150.zips"
+        download_and_extract(url, "${build_dir}/third_party")
+    }
+}

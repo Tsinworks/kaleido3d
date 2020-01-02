@@ -114,12 +114,14 @@ namespace ngfx {
 		float maxLod;
 	};
 
-    struct SwapchainDesc {
+    struct PresentLayerDesc {
         PixelFormat format;
         uint32      width;
         uint32      height;
         ColorSpace  colorSpace;
         bool        hdrDisplay;
         uint32      maxImages;
+		void*		winHandle;
+		void*		extraData;
     };
 }

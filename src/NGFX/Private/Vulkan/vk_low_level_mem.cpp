@@ -107,7 +107,7 @@ namespace vulkan {
 		device_->getBufferMemoryRequirements(buffer, &memReq);
 		memReq.alignment;
 		bool found = false;
-		VkExportMemoryAllocateInfoNV Info;
+		//VkExportMemoryAllocateInfoNV Info;
 		VkMemoryAllocateInfo alloc_info = {
 			VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, nullptr,
 			memReq.size,

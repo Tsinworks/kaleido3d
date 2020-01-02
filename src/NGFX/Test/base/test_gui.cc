@@ -18,6 +18,7 @@ namespace test
 		using namespace k3d;
 		fnCreate create = (fnCreate)loader_.ResolveSymbol("CreateFactory");
 		factory_ = MakeSharedMacro(Factory, create(true, log_print));
+
 	}
 
 	App::~App() {

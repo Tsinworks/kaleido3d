@@ -16,6 +16,7 @@ namespace test
 	protected:
 		ngfxu::Factory& factory();
 
+		ngfxu::Device					device_;
 	private:
 		k3d::os::LibraryLoader			loader_;
 		k3d::SharedPtr<ngfxu::Factory>	factory_;

@@ -6,8 +6,8 @@
 #include <unordered_map>
 #include <vector>
 #include <type_traits>
-#include <ngfx_allocator.h>
-#include <tsl/robin_map.h>
+#include "ngfx_allocator.h"
+#include "tsl/robin_map.h"
 
 namespace ngfx
 {

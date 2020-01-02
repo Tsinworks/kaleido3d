@@ -2,6 +2,10 @@
 
 namespace ngfxu
 {
+	PresentLayer Factory::newPresentLayer(ngfx::PresentLayerDesc const& desc, Device device)
+	{
+		return PresentLayer(ptr_->newPresentLayer(&desc, device.iptr(), nullptr, nullptr));
+	}
 	Drawable Factory::getDrawable()
 	{
 		return Drawable(nullptr);
@@ -47,6 +51,10 @@ namespace ngfxu
 	void RenderCommandEncoder::endEncode()
 	{
 	}
+	void ComputeEncoder::setPipeline(const ComputePipeline& pipeline)
+	{
+
+	}
 	void ComputeEncoder::updateFence(Fence fence)
 	{
 	}
@@ -59,11 +67,29 @@ namespace ngfxu
 	void ComputeEncoder::endEncode()
 	{
 	}
+	RenderPipeline Device::newRenderPipeline(const ngfx::RenderPipelineDesc& desc)
+	{
+
+		return RenderPipeline();
+	}
+	ComputePipeline Device::newComputePipeline(const ngfx::ComputePipelineDesc& desc)
+	{
+		return ComputePipeline(ptr_->newComputePipeline(&desc, nullptr));
+	}
 	Fence Device::newFence()
 	{
 		return Fence(ptr_->newFence(nullptr));
 	}
 	void Device::wait()
 	{
+	}
+	Drawable PresentLayer::nextDrawable()
+	{
+		return Drawable(ptr_->nextDrawable());
+	}
+
+	Texture Drawable::texture()
+	{
+		return Texture(ptr_->texture());
 	}
 }

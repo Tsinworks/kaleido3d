@@ -1,8 +1,3 @@
-#if _WIN32
-#define VK_KHR_win32_surface 1
-#define VK_USE_PLATFORM_WIN32_KHR 1
-#endif
-
 #include "vk_common.h"
 
 #define VULKAN_STANDARD_LAYER "VK_LAYER_LUNARG_standard_validation"
@@ -12,6 +7,7 @@ namespace vulkan
 	GpuFactory::GpuFactory(VkInstance instance, bool debug_enable, ngfx_LogCallback log_call)
 		: soloader_("vulkan-1.dll")
 		, instance_(instance)
+		, debug_report_callback_(VK_NULL_HANDLE)
 		, debug_enable_(debug_enable)
 		, log_call_(log_call)
 	{
@@ -36,6 +32,23 @@ namespace vulkan
 		VK_PROTO_FN_ZERO(GetPhysicalDeviceMemoryProperties);
 		VK_PROTO_FN_ZERO(GetPhysicalDeviceMemoryProperties2);
 
+		//~ surface functions
+		VK_PROTO_FN_ZERO(CreateWin32SurfaceKHR);
+		VK_PROTO_FN_ZERO(DestroySurfaceKHR);
+		VK_PROTO_FN_ZERO(GetPhysicalDeviceSurfaceSupportKHR);
+		VK_PROTO_FN_ZERO(GetPhysicalDeviceSurfaceCapabilitiesKHR);
+		VK_PROTO_FN_ZERO(GetPhysicalDeviceSurfaceFormatsKHR);
+		VK_PROTO_FN_ZERO(GetPhysicalDeviceSurfacePresentModesKHR);
+		VK_PROTO_FN_ZERO(SetHdrMetadataEXT);
+
+		VK_PROTO_FN_ZERO(CreateDebugReportCallbackEXT);
+		VK_PROTO_FN_ZERO(DestroyDebugReportCallbackEXT);
+
+#if defined(VK_KHR_win32_surface)
+		VK_PROTO_FN_ZERO(GetPhysicalDeviceWin32PresentationSupportKHR);
+#endif
+		//~ end surface functions 
+
 		loadInstanceFunctions();
 
 		enumerateExtensions();
@@ -43,7 +56,7 @@ namespace vulkan
 		VkApplicationInfo appInfo = { VK_STRUCTURE_TYPE_APPLICATION_INFO, nullptr,
 			"ngfx_vulkan", 1,
 			"ngfx", 1,
-			volkGetInstanceVersion()
+			VK_VERSION_1_1
 		};
 		VkInstanceCreateInfo instanceInfo = { VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, nullptr,
 			0, &appInfo
@@ -61,22 +74,74 @@ namespace vulkan
 				required_extensions.push(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 			}
 		}
-		instanceInfo.enabledLayerCount = required_layers.num();
+
+		if (hasExtension(VK_KHR_WIN32_SURFACE_EXTENSION_NAME)) {
+			required_extensions.push(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+		}
+		if (hasExtension(VK_KHR_SURFACE_EXTENSION_NAME)) {
+			required_extensions.push(VK_KHR_SURFACE_EXTENSION_NAME);
+		}
+		// hdr
+		if (hasExtension(VK_EXT_HDR_METADATA_EXTENSION_NAME)) {
+			required_extensions.push(VK_EXT_HDR_METADATA_EXTENSION_NAME);
+		}
+		if (hasExtension(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME)) {
+			required_extensions.push(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME);
+		}
+		instanceInfo.enabledLayerCount = (uint32_t)required_layers.num();
 		instanceInfo.ppEnabledLayerNames = &required_layers[0];
-		instanceInfo.enabledExtensionCount = required_extensions.num();
+		instanceInfo.enabledExtensionCount = (uint32_t)required_extensions.num();
 		instanceInfo.ppEnabledExtensionNames = &required_extensions[0];
 
 		VkResult result = __CreateInstance(&instanceInfo, NGFXVK_ALLOCATOR, &instance_);
 		check(result == VK_SUCCESS);
 		
-		VK_INST_FN_RSV(CreateDevice);
-		VK_INST_FN_RSV(DestroyDevice);
-		VK_INST_FN_RSV(GetPhysicalDeviceFeatures2);
-		VK_INST_FN_RSV(GetPhysicalDeviceProperties2);
-		VK_INST_FN_RSV(GetPhysicalDeviceMemoryProperties);
-		VK_INST_FN_RSV(GetPhysicalDeviceMemoryProperties2);
+		resolveInstanceFunctions();
 
-		VK_INST_FN_RSV(GetDeviceProcAddr);
+		if (debug_enable_ && __CreateDebugReportCallbackEXT)
+		{
+			VkDebugReportCallbackCreateInfoEXT dbgCreateInfo;
+			dbgCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT;
+			dbgCreateInfo.pNext = NULL;
+			dbgCreateInfo.pfnCallback = debugReport;
+			dbgCreateInfo.pUserData = this;
+			dbgCreateInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT |
+				VK_DEBUG_REPORT_WARNING_BIT_EXT |
+				VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
+			__CreateDebugReportCallbackEXT(instance_,
+				&dbgCreateInfo,
+				NGFXVK_ALLOCATOR,
+				&debug_report_callback_);
+		}
+
+		initDevices();
+	}
+
+	VkBool32 GpuFactory::debugReport(
+		VkDebugReportFlagsEXT flags,
+		VkDebugReportObjectTypeEXT objectType, 
+		uint64_t object, size_t location, int32_t messageCode, 
+		const char * pLayerPrefix, 
+		const char * pMessage, 
+		void * pUserData)
+	{
+		GpuFactory* f = (GpuFactory*)pUserData;
+		return f->report(
+			flags, objectType, object,
+			location, messageCode, pLayerPrefix, 
+			pMessage);
+	}
+
+	VkBool32 GpuFactory::report(
+		VkDebugReportFlagsEXT flags, 
+		VkDebugReportObjectTypeEXT objectType, 
+		uint64_t object, 
+		size_t location,
+		int32_t messageCode, 
+		const char * pLayerPrefix, 
+		const char * pMessage)
+	{
+		return VK_TRUE;
 	}
 
 	void GpuFactory::loadInstanceFunctions()
@@ -93,12 +158,50 @@ namespace vulkan
 		VK_FN_RSV(EnumerateDeviceExtensionProperties);
 		VK_FN_RSV(GetPhysicalDeviceFeatures);
 		VK_FN_RSV(GetPhysicalDeviceProperties);
+		VK_FN_RSV(GetPhysicalDeviceSurfaceSupportKHR);
+		VK_FN_RSV(GetPhysicalDeviceSurfaceCapabilitiesKHR);
+		VK_FN_RSV(GetPhysicalDeviceSurfaceFormatsKHR);
+		VK_FN_RSV(GetPhysicalDeviceSurfacePresentModesKHR);
+
+		VK_FN_RSV(DestroySurfaceKHR);
+	}
+
+	void GpuFactory::resolveInstanceFunctions()
+	{
+		VK_INST_FN_RSV(CreateDevice);
+		VK_INST_FN_RSV(DestroyDevice);
+		VK_INST_FN_RSV(GetPhysicalDeviceFeatures2);
+		VK_INST_FN_RSV(GetPhysicalDeviceProperties2);
+		VK_INST_FN_RSV(GetPhysicalDeviceMemoryProperties);
+		VK_INST_FN_RSV(GetPhysicalDeviceMemoryProperties2);
+
+		VK_INST_FN_RSV(GetDeviceProcAddr);
+
+#if defined(VK_KHR_win32_surface)
+		VK_INST_FN_RSV(CreateWin32SurfaceKHR);
+		VK_INST_FN_RSV(GetPhysicalDeviceWin32PresentationSupportKHR);
+#endif
+
+		VK_INST_FN_RSV(SetHdrMetadataEXT);
+		VK_INST_FN_RSV(CreateDebugReportCallbackEXT);
+		VK_INST_FN_RSV(DestroyDebugReportCallbackEXT);
+
+		//VK_INST_FN_RSV(GetPhysicalDeviceSurfaceSupportKHR);
+		//VK_INST_FN_RSV(GetPhysicalDeviceSurfaceCapabilitiesKHR);
+		//VK_INST_FN_RSV(GetPhysicalDeviceSurfaceFormatsKHR);
+		//VK_INST_FN_RSV(GetPhysicalDeviceSurfacePresentModesKHR);
 	}
 
 	GpuFactory::~GpuFactory()
 	{
 		// destroy devices firstly
 		devices_.clear();
+
+		if (debug_enable_ && __DestroyDebugReportCallbackEXT)
+		{
+			__DestroyDebugReportCallbackEXT(instance_, debug_report_callback_, NGFXVK_ALLOCATOR);
+			debug_report_callback_ = VK_NULL_HANDLE;
+		}
 
 		if (instance_ != VK_NULL_HANDLE)
 		{
@@ -107,7 +210,7 @@ namespace vulkan
 		}
 	}
 
-	void GpuFactory::init()
+	void GpuFactory::initDevices()
 	{
 		enumPhysicalDevices();
 
@@ -205,65 +308,11 @@ namespace vulkan
 
 	int GpuFactory::numDevices()
 	{
-		return devices_.num();
+		return (int)devices_.num();
 	}
 	ngfx::Device* GpuFactory::getDevice(ngfx::uint32 id)
 	{
 		return devices_[id].get();
-	}
-	void* GpuFactory::newSurface(void* handle)
-	{
-		VkSurfaceKHR surface;
-		VkWin32SurfaceCreateInfoKHR surfaceCreateInfo = { VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR };
-		//surfaceCreateInfo.hinstance = _windowInfo.WindowInstance;
-		surfaceCreateInfo.hwnd = reinterpret_cast<HWND>(handle);
-		//VkResult code = vkCreateWin32SurfaceKHR(instance_, &surfaceCreateInfo, NGFXVK_ALLOCATOR, &surface);
-
-		//PFN_vkGetPhysicalDeviceSurfaceSupportKHR vkGetPhysicalDeviceSurfaceSupportKHR;
-		//NVVK_RESOLVE_INSTANCE_FUNCTION_ADDRESS(_instance, vkGetPhysicalDeviceSurfaceSupportKHR);
-
-		//VkBool32 supportPresent = VK_FALSE;
-		//code = vkGetPhysicalDeviceSurfaceSupportKHR(_physicalDevice, _queuesInfo.Graphics.QueueFamilyIndex, _surface, &supportPresent);
-		/*
-		NVVK_CHECK_ERROR(code, L"vkGetPhysicalDeviceSurfaceSupportKHR");
-		if (!supportPresent)
-		{
-			ExitError(L"Graphics queue does not support presenting");
-		}
-		*/
-
-		/*
-		PFN_vkGetPhysicalDeviceSurfaceFormatsKHR vkGetPhysicalDeviceSurfaceFormatsKHR;
-		 NVVK_RESOLVE_INSTANCE_FUNCTION_ADDRESS(_instance, vkGetPhysicalDeviceSurfaceFormatsKHR);
-
-		 uint32_t formatCount;
-		 vkGetPhysicalDeviceSurfaceFormatsKHR(_physicalDevice, _surface, &formatCount, nullptr);
-		 std::vector<VkSurfaceFormatKHR> surfaceFormats(formatCount);
-		 vkGetPhysicalDeviceSurfaceFormatsKHR(_physicalDevice, _surface, &formatCount, surfaceFormats.data());
-
-		 if (formatCount == 1 && surfaceFormats[0].format == VK_FORMAT_UNDEFINED)
-		 {
-			 _surfaceFormat.format = _settings.DesiredSurfaceFormat;
-			 _surfaceFormat.colorSpace = surfaceFormats[0].colorSpace;
-		 }
-		 else
-		 {
-			 bool found = false;
-			 for (auto& surfaceFormat : surfaceFormats)
-			 {
-				 if (surfaceFormat.format == _settings.DesiredSurfaceFormat)
-				 {
-					 _surfaceFormat = surfaceFormat;
-					 found = true;
-					 break;
-				 }
-			 }
-			 if (!found)
-			 {
-				 _surfaceFormat = surfaceFormats[0];
-			 }
-		 }*/
-		return (void*)surface;
 	}
 
 	void GpuFactory::enumPhysicalDevices()

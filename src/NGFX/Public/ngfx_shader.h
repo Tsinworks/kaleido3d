@@ -62,90 +62,82 @@ namespace ngfx {
         MTBC = MAKE_SHADER_FORMAT('M', 'T', 'B', 'C'), // Metal
         MTSL = MAKE_SHADER_FORMAT('M', 'T', 'S', 'L'), // Metal
     };
-    /*
-    * OpenGL ES 3.+: BlockBuffer, SamplerTexture
-    * Metal        : Buffer, Texture
-    * Direct3D     : CBV, SRV, UAV
-    * Vulkan       : Buffer, StorageImage, SamplerImage, TexelBuffer
-    */
-    class NGFX_SHADER_API SerializedShaderVariable
-    {
-    public:
-        enum Type : uint8_t {
-            VT_Buffer = 1, // structs, matrixes, vectors, except constants
-            VT_Texture = 2, // texture{123d}{array}
-            VT_Sampler = 3,
-        };
-        enum Access : uint8_t {
-            VA_Read = 1,
-            VA_Write = 2,
-            VA_ReadWrite = 3,
-        };
-        enum Dimension : uint8_t {
-            VTD_Tex1D,
-            VTD_Tex2D,
-            VTD_Tex2DMS,
-            VTD_Tex2DArray,
-            VTD_Tex3D,
-            VTD_Tex3DArray,
-            VTD_TexCube,
-            VTD_Buffer,
-        };
-        SerializedShaderVariable();
-        ~SerializedShaderVariable();
 
-        void Serialize(void* InOutData, size_t Length, bool In = false);
+	struct ShaderResource
+	{
+		enum Type
+		{
+			Sampler,
+			Constant,
+			UniformBuffer,	// Or constant buffer
+			Buffer,			// Buffer<float4>, RWBuffer, RWStructuredBuffer
+			Texture1D,
+			Texture2D,
+			Texture3D,
+			Texture1DArray,
+			Texture2DArray,
+			TextureCube,
+			AccelerationStructure,
+		};
+		enum Access
+		{
+			Default = 0,
+			ReadOnly = 1,
+			WriteOnly = 2,
+			ReadWrite = 3,
+		};
+		uint32_t type			: 4; // consume 16 types, buffer, texture, samplerstate, 
+		uint32_t access			: 2; // 4 access
+		uint32_t slot			: 5; // max to 32 (type) slots
+		uint32_t sparse			: 1; // sparse binding resource
+		uint32_t is_array		: 1;
+		uint32_t is_vertexbuffer: 1;
+		uint32_t has_structure  : 1; // if is structured buffer, need to know structure size
+		uint32_t reserved		: 1;
+		uint32_t stride			: 16; // size of structured element, max to 32768
+		uint32_t array_length;
+		char	 name[32];
+	};
 
-    private:
-        Type            m_Type;
-        Access          m_Access;
-        int32_t         m_Index;
-        int32_t         m_ArrayLength;
-        Dimension       m_TexDim;
-        int32_t         m_BufferAlignment;
-        //ShaderStageBit  m_Stage : 8;
-        int32_t         m_NameLength;
-        char*           m_Name;
-    };
-	class NGFX_SHADER_API SerializedShader
+	static_assert(sizeof(ShaderResource) == 40, "size of ShaderResource is not 40!!");
+
+	class NGFX_SHADER_API ShaderBinary
 	{
 	public:
-        SerializedShader();
-        ~SerializedShader();
+        ShaderBinary();
+        ~ShaderBinary();
 
         void Serialize(void* InOutData, size_t Length, bool In = false);
 
     private:
         // Length of shader
-        int32_t         m_Length;
-        int32_t         m_Version;
-        _ShaderProfile  m_Profile;
+        int32_t				length_;
+        int32_t				version_;
+        _ShaderProfile		profile_;
+		
+		Vec<ShaderResource> shader_resource_table_;
+
         // DXBC/SPV1/DXIL/MTBC/GLSL/GLBC/ESSL/MTSL
-        _ShaderFormat   m_Format;
+        _ShaderFormat		format_;
         // Shader HashCode
-        uint64_t        m_Hash;
+        uint64_t			hash_; // use 128 instead ?
         // Shader Type
         //ShaderStageBit  m_Stage : 8;
-        uint32_t        m_EntryPointNameLength;
-        char*           m_EntryPointName;
-        uint32_t        m_CodeLength;
-        int8_t*         m_Code;
+		char				entry_point_[32];
 	};
-    class NGFX_SHADER_API SerializedShaderLibrary
+
+    class NGFX_SHADER_API ShaderLibrary
     {
     public:
-        SerializedShaderLibrary();
-        ~SerializedShaderLibrary();
+        ShaderLibrary();
+        ~ShaderLibrary();
 
         void Serialize(void* InOutData, size_t Length, bool In = false);
     private:
-        int32_t         m_Length;
-        int32_t         m_Version;
-        uint64_t        m_Hash;
-        //ShaderStageBit  m_Stages : 8;
-        uint32_t        m_NumVariables;
-        SerializedShaderVariable* m_Variables;
-        SerializedShader* m_Shaders;
+        int32_t				length_;
+        int32_t				version_;
+        uint64_t			hash_;
+        ShaderBinary*		shaders_;
     };
 }
 

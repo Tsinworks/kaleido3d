@@ -60,7 +60,7 @@ namespace vulkan {
 		memoryAllocateInfo.pNext = nullptr;
 		memoryAllocateInfo.allocationSize = memoryRequirements.size;
 		GpuAllocator::MemoryItem memItem;
-		mem_alloc_.allocateForAccelerationStructure(as, ngfx::StorageMode::OnGpu, memItem);
+		mem_alloc_.allocateForAccelerationStructure(as, ngfx::StorageMode::Private, memItem);
         return new GpuRaytracingAccelerationStructure(*rtDesc, as, memItem, this);
     }
 
