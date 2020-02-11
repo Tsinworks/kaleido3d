@@ -2,7 +2,7 @@ cmake_minimum_required (VERSION 3.6)
 project (kaleido3d)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS on)
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${kaleido3d_SOURCE_DIR}/scripts/cmake")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${kaleido3d_SOURCE_DIR}/scripts/cmake" "${CMAKE_SOURCE_DIR}/.build/third_party")
 
 option(BUILD_SHARED "build shared libraries" ON)
 option(BUILD_WITH_UNIT_TEST "build with unit test" OFF)

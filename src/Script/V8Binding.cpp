@@ -1,18 +1,47 @@
 #include "V8Binding.h"
 #include "../NGFX/Public/ngfx.h"
 
+#define V8_FUNC_BEGIN(Name) void V8##Name(const FunctionCallbackInfo<v8::Value>& args) {
+#define V8_FUNC_END }
+#define V8_FUNC_EXTDECL(Name) Local<External> pRet##Name = External::New(args.GetIsolate(), p##Name);
+#define V8_FUNC_ARG_RET //args.GetReturnValue().Set
+
+#define V8_INTERFACE_DEFINE_GLOBAL(ClassName) Global<ObjectTemplate> g##ClassName##Templ
+#define V8_INTERFACE_BEGIN(ClassName) if (g##ClassName##Templ.IsEmpty()) { Local<ObjectTemplate> _ClassName##Templ = ObjectTemplate::New(args.GetIsolate());
+#define V8_INTERFACE_FIELD_COUNT(Count) _ClassName##Templ->SetInternalFieldCount(Count);
+#define V8_INTERFACE_METHOD(Name, ClassName) _ClassName##Templ->Set(String::NewFromUtf8(args.GetIsolate(), #Name).ToLocalChecked(), FunctionTemplate::New(args.GetIsolate(), V8##Name))
+#define V8_INTERFACE_END(ClassName) g##ClassName##Templ.Reset(args.GetIsolate(),  _ClassName##Templ); }
+
 using namespace k3d;
 using namespace ngfx;
 
 namespace v8
 {
-	Global<ObjectTemplate> gAppTempl;
+	V8_INTERFACE_DEFINE_GLOBAL(App);
+	V8_INTERFACE_DEFINE_GLOBAL(Factory);
+	V8_INTERFACE_DEFINE_GLOBAL(Device);
+	V8_INTERFACE_DEFINE_GLOBAL(CommandQueue);
 
-    Global<ObjectTemplate> gCommandQueueTempl;
-    Global<ObjectTemplate> gDeviceTempl;
-    Global<ObjectTemplate> gFactoryTempl;
+	V8_FUNC_BEGIN(GetDevice)
 
+	V8_FUNC_END
 
+	V8_FUNC_BEGIN(GetDeviceCount)
+
+	V8_FUNC_END
+
+	V8_FUNC_BEGIN(CreateFactory)
+		V8_INTERFACE_BEGIN(Factory);
+		V8_INTERFACE_FIELD_COUNT(1)
+		V8_INTERFACE_METHOD(GetDevice, Factory);
+		V8_INTERFACE_METHOD(GetDeviceCount, Factory);
+		V8_INTERFACE_END(Factory)
+
+		//V8_FUNC_EXTDECL(factory)
+		V8_FUNC_ARG_RET
+	V8_FUNC_END
+
+#if 0
     static void vk_commandQueue_commandBuffer(const FunctionCallbackInfo<v8::Value>& args)
     {
 
@@ -48,12 +77,11 @@ namespace v8
             gCommandQueueTempl.Reset(args.GetIsolate(), cmdQueueTempl);
         }
         Local<ObjectTemplate> cmdQueueTempl = Local<ObjectTemplate>::New(args.GetIsolate(), gCommandQueueTempl);
-        Local<Object> cmdQueue = cmdQueueTempl->NewInstance().ToLocalChecked();
+        Local<Object> cmdQueue = cmdQueueTempl->NewInstance(args.GetIsolate()->GetCurrentContext()).ToLocalChecked();
         Local<External> cmdQueuePtr = External::New(args.GetIsolate(), pCmdQueue);
         cmdQueue->SetInternalField(0, cmdQueuePtr);
         args.GetReturnValue().Set(cmdQueue);
     }
-
     static void vk_factory_createSwapchain(const FunctionCallbackInfo<v8::Value>& args)
     {
         Local<External> factory = Local<External>::Cast(args.Holder()->GetInternalField(0));
@@ -84,9 +112,7 @@ namespace v8
         ptr->EnumDevice(&count, nullptr);
         Device ** ppDevice = new Device*[count];
         ptr->EnumDevice(&count, ppDevice);
-
         auto deviceArray = Array::New(args.GetIsolate(), count);
-
         if (gDeviceTempl.IsEmpty())
         {
             Local<ObjectTemplate> deviceTempl = ObjectTemplate::New(args.GetIsolate());
@@ -112,7 +138,6 @@ namespace v8
             gDeviceTempl.Reset(args.GetIsolate(), deviceTempl);
         }
         Local<ObjectTemplate> deviceTempl = Local<ObjectTemplate>::New(args.GetIsolate(), gDeviceTempl);
-
         for (uint32_t i = 0; i < count; i++)
         {
             Local<Object> device =
@@ -128,15 +153,8 @@ namespace v8
     {
         if (gFactoryTempl.IsEmpty())
         {
-            Local<ObjectTemplate> factoryTempl = ObjectTemplate::New(args.GetIsolate());
-            factoryTempl->SetInternalFieldCount(1);
-            factoryTempl->Set(String::NewFromUtf8(args.GetIsolate(), "enumDevices"),
-                FunctionTemplate::New(args.GetIsolate(), vk_factory_enumDevices));
-            factoryTempl->Set(String::NewFromUtf8(args.GetIsolate(), "createSwapChain"),
-                FunctionTemplate::New(args.GetIsolate(), vk_factory_createSwapchain));
-            gFactoryTempl.Reset(args.GetIsolate(), factoryTempl);
+            //gFactoryTempl.Reset(args.GetIsolate(), factoryTempl);
         }
-
         Local<ObjectTemplate> factoryTempl = Local<ObjectTemplate>::New(args.GetIsolate(), gFactoryTempl);
         Local<Object> result = factoryTempl->NewInstance(args.GetIsolate()->GetCurrentContext())
             .ToLocalChecked();
@@ -144,9 +162,9 @@ namespace v8
         CreateFactory(&factory, false);
         Local<External> factory_ptr = External::New(args.GetIsolate(), factory);
         result->SetInternalField(0, factory_ptr);
-
         args.GetReturnValue().Set(result);
     }
+#endif
 
 	ScriptEngine::ScriptEngine()
 	{
@@ -169,34 +187,36 @@ namespace v8
 		Local<Value> result;
 		TryCatch try_catch(getIsoloate());
 		Local<Script> compiled_script;
-		if (!Script::Compile(context, String::NewFromUtf8(getIsoloate(), scripts)).ToLocal(&compiled_script)) {
-			String::Utf8Value error(try_catch.Exception());
+		if (!Script::Compile(context, 
+			String::NewFromUtf8(getIsoloate(), scripts).ToLocalChecked())
+			.ToLocal(&compiled_script)) {
+			String::Utf8Value error(getIsoloate(), try_catch.Exception());
 			return result;
 		}
 		// Run the script!
 		auto val = compiled_script->Run(context);
 		if (!val.ToLocal(&result)) {
-			String::Utf8Value error(try_catch.Exception());
+			String::Utf8Value error(getIsoloate(), try_catch.Exception());
 			return result;
 		}
-		String::Utf8Value ret(result);
+		String::Utf8Value ret(getIsoloate(), result);
 		KLOG(Info, "V8Script", "---- ExecuteScript %s", *ret);
 		return result;
 	}
 
 	void ScriptEngine::initializeWithExtData() {
-		IAsset * natives_blob = AssetManager::Open("asset://Test/natives_blob.bin");
-		uint64 natives_blobs_length = natives_blob->GetLength();
-		StartupData ndata = { (const char*)natives_blob->GetBuffer(), (int)natives_blobs_length };
-		V8::SetNativesDataBlob(&ndata);
+		//IAsset * natives_blob = AssetManager::Open("asset://Test/natives_blob.bin");
+		//uint64 natives_blobs_length = natives_blob->GetLength();
+		//StartupData ndata = { (const char*)natives_blob->GetBuffer(), (int)natives_blobs_length };
+		//V8::SetNativesDataBlob(&ndata);
 
-		IAsset * snapshot_blob = AssetManager::Open("asset://Test/snapshot_blob.bin");
-		uint64 snapshot_blob_length = snapshot_blob->GetLength();
-		StartupData sdata = { (const char*)snapshot_blob->GetBuffer(), (int)snapshot_blob_length };
-		V8::SetSnapshotDataBlob(&sdata);
+		//IAsset * snapshot_blob = AssetManager::Open("asset://Test/snapshot_blob.bin");
+		//uint64 snapshot_blob_length = snapshot_blob->GetLength();
+		//StartupData sdata = { (const char*)snapshot_blob->GetBuffer(), (int)snapshot_blob_length };
+		//V8::SetSnapshotDataBlob(&sdata);
 
-		auto platform = platform::CreateDefaultPlatform();
-		V8::InitializePlatform(platform);
+		auto platform = platform::NewDefaultPlatform();
+		V8::InitializePlatform(platform.get());
 		V8::Initialize();
 	}
 
@@ -215,14 +235,16 @@ namespace v8
 		isolate_->Enter();
 		HandleScope handleScope(isolate);
 		global_template_ = ObjectTemplate::New(isolate);
-		global_template_->Set(String::NewFromUtf8(isolate, "GetVkCurrentDevice"), FunctionTemplate::New(isolate, GetCurrentDeviceInfo));
+		global_template_->Set(
+			String::NewFromUtf8(isolate, "GetVkCurrentDevice").ToLocalChecked(),
+			FunctionTemplate::New(isolate, GetCurrentDeviceInfo));
 		Local<Context> context = Context::New(isolate, nullptr, global_template_);
 		context_.Reset(isolate, context);
 	}
 
 	void ScriptEngine::destroy() {
-		//isolate_->Exit();
-		//isolate_->Dispose();
+		isolate_->Exit();
+		isolate_->Dispose();
 		V8::Dispose();
 		V8::ShutdownPlatform();
 	}
@@ -263,7 +285,10 @@ namespace v8
 	{
 		return "V8Script";
 	}
-
 }
+
+#if _WIN32
+
+#endif
 
 //MODULE_IMPLEMENT(V8Script, v8::V8Module)

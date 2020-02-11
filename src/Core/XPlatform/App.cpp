@@ -22,6 +22,22 @@ namespace k3d
 		m_Window = MakePlatformWindow(appName.CStr(), width, height);
 	}
 
+	App::App(int argc, char** argv, String const & appName)
+		: m_Window(nullptr)
+		, m_AppName(appName)
+	{
+		RegisterApp();
+		m_Window = MakePlatformWindow(appName.CStr(), 1920, 1080);
+	}
+
+	App::App(int argc, char** argv, String const & appName, U32 width, U32 height)
+		: m_Window(nullptr)
+		, m_AppName(appName)
+	{
+		RegisterApp();
+		m_Window = MakePlatformWindow(appName.CStr(), width, height);
+	}
+
 	App::~App()
 	{
 	}

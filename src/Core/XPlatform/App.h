@@ -62,7 +62,7 @@ namespace __android_internal
 
 namespace k3d
 {
-  class IWindow;
+	class IWindow;
     
 	enum class AppStatus : U32
 	{
@@ -70,11 +70,14 @@ namespace k3d
 		UnInitialized
 	};
 
-  class K3D_CORE_API App
+	class K3D_CORE_API App
 	{
-  public:
-    explicit App(String const & appName);
+	public:
+		explicit App(String const & appName);
 		App(String const & appName, U32 width, U32 height);
+		App(int argc, char** argv, String const & appName);
+		App(int argc, char** argv, String const & appName, U32 width, U32 height);
+
         virtual ~App();
 
 		virtual void InitWindow(void *param);
@@ -160,10 +163,24 @@ return new className(#className);\
 }
 
 #elif K3DPLATFORM_OS_WIN
+#ifdef __cplusplus
+extern "C" {
+#endif
+	K3D_CORE_API char** CommandLineToArgvA(const char* lpCmdLine, int *pNumArgs);
+#ifdef __cplusplus
+}
+#endif
 #define K3D_APP_MAIN(className) \
 	int WinMain(HINSTANCE,HINSTANCE,LPSTR CmdLine,int) \
-	{ \
+	{	\
 		className app(#className); \
+		return ::k3d::RunApplication(app, #className); \
+	}
+#define K3D_APP_MAIN_ARG(className) \
+	int WinMain(HINSTANCE,HINSTANCE,LPSTR CmdLine,int) \
+	{	int argc = 0; char** argv = nullptr;\
+		argv = CommandLineToArgvA(CmdLine, &argc); \
+		className app(argc, argv, #className); \
 		return ::k3d::RunApplication(app, #className); \
 	}
 #elif K3DPLATFORM_OS_ANDROID
@@ -181,6 +198,8 @@ k3d::App* ACreateApp(ANativeWindow*window,int width,int height) {\
         className app(#className); \
         return ::k3d::RunApplication(app, #className); \
     }
+
+#define K3D_APP_MAIN_ARG(className) 
 #endif
 
 #endif
