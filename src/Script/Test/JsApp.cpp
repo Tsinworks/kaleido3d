@@ -43,15 +43,13 @@ namespace JavaScript
 		Global<Context>			context;
 	};
 
-	Application::Application() : k3d::App("JsApplication", 1024, 768), h_(nullptr)
+	Application::Application() : k3d::App("JsApplication", 1024, 768), h_(new JsHolders)
 	{
-		h_ = new JsHolders;
 	}
 
 	Application::Application(int argc, char** argv, k3d::String const & appName)
-		: k3d::App(argc, argv, appName, 1024, 768), h_(nullptr)
+		: k3d::App(argc, argv, appName, 1024, 768), h_(new JsHolders)
 	{
-		h_ = new JsHolders;
 	}
 
 	Application::~Application()

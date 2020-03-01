@@ -7,8 +7,14 @@
 class JsApp : public JavaScript::Application
 {
 public:
-	JsApp(k3d::String const& Name) : JavaScript::Application() {}
-	JsApp(int argc, char** argv, k3d::String const & appName) : JavaScript::Application(argc, argv, appName)
+	JsApp(k3d::String const& Name) 
+		: JavaScript::Application() 
+	{
+
+	}
+
+	JsApp(int argc, char** argv, k3d::String const & appName) 
+		: JavaScript::Application(argc, argv, appName)
 	{
 
 	}

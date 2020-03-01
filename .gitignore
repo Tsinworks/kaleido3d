@@ -22,6 +22,7 @@ Tools/Build/Apple/Intermediate/**
 Tools/Build/Linux/Intermediate/**
 Tools/Build/Android/Intermediate/**
 Build*
+dev/IrisBuild/.vscode/
 !**/build.gradle
 !/Project/android/gradle/**
 Bin/*

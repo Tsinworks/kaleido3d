@@ -6,12 +6,16 @@ test_file = os.path.join(cur_dir, '../../../samples/igen/ngfx.interface.hpp')
 gen = xige.InterfaceGenerator()
 
 class EnumObj(object):
-    def __init__(self, n):
+    def __init__(self, n, namespace):
         self._root = n
+        self._namespace = namespace
         self._enums = []
 
     def append(self, enum):
         self._enums.append(enum)
+
+    def get_cpp_name(self):
+        return self._namespace + '::' + self._root.get_name()
 
     def __str__(self):
         src = 'enum class ' + self._root.get_name() + ' : uint8_t {\n'
@@ -37,8 +41,9 @@ class EnumObj(object):
         return src
 
 class StructObj(object):
-    def __init__(self, struct):
+    def __init__(self, struct, namespace):
         self._root = struct
+        self._namespace = namespace
         self._base = None
         self._members = []
 
@@ -47,6 +52,9 @@ class StructObj(object):
 
     def append(self, member):
         self._members.append(member)
+        
+    def get_cpp_name(self):
+        return self._namespace + '::' + self._root.get_name()
 
     def replace_type(self, type):
         if type == 'array':
@@ -86,16 +94,27 @@ class StructObj(object):
         return struct_stat
 
 class FunctionObj(object):
-    def __init__(self, fn):
+    def __init__(self, fn, namespace):
+        self._namespace = namespace
         self._params = []
         self._ret = None
         self._root = fn
+        self._interface = None # check if is member function within an interface
     
     def append(self, param):
         self._params.append(param)
 
+    def set_interface(self, n):
+        self._interface = n # set interface object
+
+    def is_global(self):
+        return self._interface is None
+
     def ret(self, ret):
         self._ret = ret
+
+    def get_cpp_name(self):
+        return self._namespace + '::' + self._root.get_name()
 
     def __str__(self):
         ret_name = self._ret.get_type().get_name()
@@ -129,18 +148,20 @@ class FunctionObj(object):
             params.append(p_name + param.get_name())
         is_const = self._root.is_function_const()
 
-
-
         return rname + fn_name + '(' + ', '.join(params) + ')' + (' const' if is_const else '')
 
 class InterfaceObj(object):
-    def __init__(self, int_node):
+    def __init__(self, int_node, namespace):
         self._root = int_node
+        self._namespace = namespace
         self._funcs = []
         self._is_forward_decl = int_node.is_forward_decl()
 
     def append(self, fn):
         self._funcs.append(fn)
+
+    def get_cpp_name(self):
+        return self._namespace + '::' + self._root.get_name()
 
     def __str__(self):
         int_stat = 'struct '
@@ -161,6 +182,7 @@ class InterfaceObj(object):
 
 class V8JsGen(object):
     def __init__(self):
+        self._namespace = ''
         self.stack = []
         self._source = ''
         self._funcs = []
@@ -185,12 +207,13 @@ class V8JsGen(object):
             self._source += 'namespace '
             self._source += node.get_name()
             self._source += ' {\n'
+            self._namespace = node.get_name() # assign namespace
         elif type == xige.NodeType.Enum:
-            self._enums.append(EnumObj(node))
+            self._enums.append(EnumObj(node, self._namespace))
         elif type == xige.NodeType.EnumValue:
             self._enums[-1].append(node)
         elif type == xige.NodeType.Struct:
-            new_struct = StructObj(node)
+            new_struct = StructObj(node, self._namespace)
             bn = node.get_base_type()
             if bn:
                 new_struct.set_base(bn)
@@ -198,9 +221,9 @@ class V8JsGen(object):
         elif type == xige.NodeType.StructMember:
             self._structs[-1].append(node)
         elif type == xige.NodeType.Interface:
-            self._interfaces.append(InterfaceObj(node))
+            self._interfaces.append(InterfaceObj(node, self._namespace))
         elif type == xige.NodeType.Function:
-            self._funcs.append(FunctionObj(node))
+            self._funcs.append(FunctionObj(node, self._namespace))
         elif type == xige.NodeType.FunctionParam:
             self._funcs[-1].append(node)
         elif type == xige.NodeType.FunctionRet:
@@ -209,19 +232,20 @@ class V8JsGen(object):
     def on_end(self, node):
         t = self.stack.pop()
         if t == xige.NodeType.Namespace:
-            self._source += '}\n'
+            #self._source += '}\n'
         elif t == xige.NodeType.Struct:
             struct = self._structs.pop()
-            self._source += str(struct)
+            #self._source += str(struct)
         elif t == xige.NodeType.Enum:
             enum = self._enums.pop()
-            self._source += str(enum)
+            #self._source += str(enum)
         elif t == xige.NodeType.Function:
             fn = self._funcs.pop()
-            self._interfaces[-1].append(fn)
+            fn.set_interface(self._interfaces[-1])
+            self._interfaces[-1].append(fn) # member function
         elif t == xige.NodeType.Interface:
             interface = self._interfaces.pop()
-            self._source += str(interface)
+            #self._source += str(interface)
 
     def get_source(self):
         hdr_src = '#ifndef __ngfx_v8_js_h__\n#define __ngfx_v8_js_h__\n'
@@ -230,6 +254,26 @@ class V8JsGen(object):
         hdr_src += 'using namespace ngfx;\n'
         hdr_src += 'namespace v8 {\n'
         return hdr_src + self._source + '}\n#endif'
+
+    def generate_enums(self):
+        # Local<Object> obj;
+        # const char* k ="HEADERS_RECEIVED";
+        # int v = 1;
+        # obj->Set(v8::String::NewSymbol(k), v8::Int32::New(v), ReadOnly);
+
+        return 'void InitializeEnums()'
+
+    def generate_structs(self):
+        # Local<Object> result = Object::New(isolate);
+        # result->Set(String::NewFromUtf8(isolate, "empNo"), Number::New(isolate, e.empNo));
+        # result->Set(String::NewFromUtf8(isolate, "empName"), String::NewFromUtf8(isolate, e.empName.c_str()));
+        return 'void InitializeStructs()'
+
+    def generate_interfaces(self):
+        return 'void InitializeInterfaces()'
+
+    def generate_global_functions(self):
+        return 'void InitializeGlobalFunctions()'
 
     def gen_impl_header(self, backend):
         return ''
