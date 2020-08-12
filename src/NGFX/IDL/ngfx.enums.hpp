@@ -134,10 +134,10 @@ namespace ngfx {
         Short3[[mtl("MTLVertexFormatShort3"), vk("VK_FORMAT_UNDEFINED")]],
         Short4[[mtl("MTLVertexFormatShort4"), vk("VK_FORMAT_UNDEFINED")]],
 
-        Half[[mtl("MTLVertexFormatHalf"), vk("VK_FORMAT_UNDEFINED")]],
-        Half2[[mtl("MTLVertexFormatHalf2"), vk("VK_FORMAT_UNDEFINED")]],
-        Half3[[mtl("MTLVertexFormatHalf3"), vk("VK_FORMAT_UNDEFINED")]],
-        Half4[[mtl("MTLVertexFormatHalf4"), vk("VK_FORMAT_UNDEFINED")]],
+        Half[[mtl("MTLVertexFormatHalf"), vk("VK_FORMAT_R16_SFLOAT")]],
+        Half2[[mtl("MTLVertexFormatHalf2"), vk("VK_FORMAT_R16G16_SFLOAT")]],
+        Half3[[mtl("MTLVertexFormatHalf3"), vk("VK_FORMAT_R16G16B16_SFLOAT")]], // d3d12 lacks
+        Half4[[mtl("MTLVertexFormatHalf4"), vk("VK_FORMAT_R16G16B16A16_SFLOAT")]],
 
         Float[[mtl("MTLVertexFormatFloat"), vk("VK_FORMAT_UNDEFINED")]],
         Float2[[mtl("MTLVertexFormatFloat2"), vk("VK_FORMAT_UNDEFINED")]],
@@ -154,8 +154,8 @@ namespace ngfx {
         Int3[[mtl("MTLVertexFormatInt3"), vk("VK_FORMAT_UNDEFINED")]],
         Int4[[mtl("MTLVertexFormatInt4"), vk("VK_FORMAT_UNDEFINED")]],
 
-        Int1010102Norm[[mtl("MTLVertexFormatInt1010102Normalized"), vk("VK_FORMAT_UNDEFINED")]],
-        UInt1010102Norm[[mtl("MTLVertexFormatUInt1010102Normalized"), vk("VK_FORMAT_UNDEFINED")]]
+        Int1010102Norm[[mtl("MTLVertexFormatInt1010102Normalized"), vk("VK_FORMAT_A2R10G10B10_SNORM_PACK32")]],
+        UInt1010102Norm[[mtl("MTLVertexFormatUInt1010102Normalized"), vk("VK_FORMAT_A2R10G10B10_UNORM_PACK32")]]
     };
     [[mtl("MTLIndexType"), vk("VkIndexType")]]
     enum IndexType {
