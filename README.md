@@ -58,6 +58,10 @@ Framework development discussions and thorough bug reports are collected on [Iss
 
 ---
 
+Donate
+=====
+
+ETH Address: 0x47a23630f218D3F7C14A2716fba0383Ecc130Bfc
 
 Credits
 =====
